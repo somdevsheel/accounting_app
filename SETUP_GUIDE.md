@@ -218,7 +218,22 @@ Common ones:
     or `%APPDATA%\Accrued\company.db` (Windows).
   - Running from source: delete `backend/data/company.db`.
 
-
+```
 
 sudo apt install ./accrued-accounting_1.0.0_amd64.deb
 sudo apt remove accrued-accounting 
+
+
+
+
+Ubuntu/Linux: ~/.config/Accrued/company.db
+
+File manager (Nautilus/Files): open it, press Ctrl+L to type a path, enter ~/.config/Accrued and hit Enter. (It's a hidden folder — .config starts with a dot — so if browsing manually instead, press Ctrl+H first to show hidden files/folders.)
+Terminal: ls ~/.config/Accrued
+Windows: %APPDATA%\Accrued\company.db — expands to C:\Users\<YourUsername>\AppData\Roaming\Accrued\company.db
+
+Press Win + R, type %APPDATA%\Accrued, press Enter — opens the folder directly in File Explorer.
+Or paste %APPDATA%\Accrued straight into File Explorer's address bar.
+Both are created automatically the first time you run Accrued and complete the Setup Wizard — they won't exist before that.
+
+```

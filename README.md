@@ -11,8 +11,9 @@ chart of accounts) instead of a dashboard pre-loaded with someone else's data. N
 hardcoded to a specific business.
 
 See [`SETUP_GUIDE.md`](SETUP_GUIDE.md) for step-by-step install/build instructions on Windows and
-Linux, and [`USER_GUIDE.md`](USER_GUIDE.md) for day-to-day how-tos (e.g. recording an owner's
-capital contribution).
+Linux, [`USER_GUIDE.md`](USER_GUIDE.md) for day-to-day how-tos (e.g. recording an owner's capital
+contribution), and [`CHANGELOG.md`](CHANGELOG.md) for what's been built, why, and what's been
+deliberately deferred.
 
 ## Project layout
 

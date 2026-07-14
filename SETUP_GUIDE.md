@@ -1,9 +1,9 @@
 # Setup Guide (Windows & Linux)
 
 Step-by-step instructions for getting Accrued running, on either platform, whichever way fits
-what you're trying to do. If you just want to *use* the app, look for **"Just run it"** below —
-skip the build/dev sections entirely. See [`README.md`](README.md) for architecture/technical
-detail and [`USER_GUIDE.md`](USER_GUIDE.md) for how to use the app once it's open.
+what you're trying to do — including if this machine has neither Python nor Node.js installed.
+See [`README.md`](README.md) for architecture/technical detail and [`USER_GUIDE.md`](USER_GUIDE.md)
+for how to use the app once it's open.
 
 ## Contents
 
@@ -15,23 +15,39 @@ detail and [`USER_GUIDE.md`](USER_GUIDE.md) for how to use the app once it's ope
 
 ## Windows
 
-### Just run it (recommended)
+### Already have the installer?
 
-1. Get `Accrued Setup 1.0.0.exe` — either someone gave you the file directly, or build it
-   yourself with **zero local installs** via GitHub Actions:
-   - Push this repo to GitHub (if it isn't already).
-   - On GitHub: **Actions** tab → **Build Windows installer** → **Run workflow**.
-   - Wait for the run to finish (a few minutes), open it, download **Accrued-Windows-Installer**
-     under **Artifacts**, unzip it.
-2. Double-click `Accrued Setup 1.0.0.exe` and follow the installer.
-3. Launch **Accrued** from the Start Menu. First launch takes a few seconds longer (the backend
+1. Double-click `Accrued Setup 1.0.0.exe` and follow the installer.
+2. Launch **Accrued** from the Start Menu. First launch takes a few seconds longer (the backend
    is starting up behind the animated splash screen) — after that it's instant.
-4. You'll land on the **Setup Wizard** — see [First launch](#first-launch-either-platform) below.
+3. You'll land on the **Setup Wizard** — see [First launch](#first-launch-either-platform) below.
 
-Nothing else to install. No Python, no Node — the backend is bundled into the installer as a
-standalone executable.
+Nothing else to install — no Python, no Node needed on this machine. The backend is bundled into
+the installer as a standalone executable. If you don't have the installer yet, keep reading.
 
-### Build it yourself, locally
+### No Python, no Node on this Windows machine? (recommended)
+
+You don't need to install either — GitHub builds the installer for you, on GitHub's own Windows
+machine, for free:
+
+1. Make sure this repo is pushed to GitHub (`git push origin main`, from any machine that has
+   git — doesn't have to be this Windows one).
+2. Open the repo on **github.com** in a browser and sign in.
+3. Click the **Actions** tab (top of the repo page).
+4. In the left sidebar, click **Build Windows installer**.
+5. Click the **Run workflow** button (top right of the file list), then the green **Run
+   workflow** button in the dropdown that appears. Leave the branch as `main`.
+6. Wait for it to finish — refresh the page; a spinning yellow dot turns into a green checkmark
+   when done (a few minutes).
+7. Click into that finished run. Scroll down to **Artifacts** and click
+   **Accrued-Windows-Installer** to download it — it's a `.zip` containing the real `.exe`.
+8. Unzip it, then follow **"Already have the installer?"** above.
+
+Nothing was installed on this Windows machine at any point in that process — only a web browser
+was needed. Repeat these steps any time you want a fresh build after the code changes (e.g. a
+new commit was pushed).
+
+### Build it yourself, locally (needs Python + Node)
 
 Only needed if you don't want to use GitHub Actions and prefer building directly on your own
 Windows machine.

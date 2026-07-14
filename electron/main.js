@@ -21,14 +21,22 @@ const FROZEN_BACKEND_DIR = app.isPackaged
 // Always computed and always passed to the backend (not just when packaged):
 // a locally frozen build run via plain `npm start` has no "../frontend" or
 // "./data" sibling of its own — its bundled location is wherever PyInstaller
-// put it — so it needs to be told explicitly even in dev mode. Kept at the
-// same place regardless of source vs. frozen backend, so switching between
-// them (e.g. across an app update) never orphans a user's existing data.
+// put it — so it needs to be told explicitly even in dev mode.
 const BACKEND_FRONTEND_DIR = app.isPackaged
   ? path.join(process.resourcesPath, "frontend")
   : path.join(BACKEND_DIR, "..", "frontend");
+// The database MUST live somewhere the app can actually write, which
+// resourcesPath is not guaranteed to be: the .deb target installs to
+// /opt/Accrued, owned by root, so a normal user's backend process gets
+// PermissionError trying to create resources/backend/data/ there (AppImage
+// and the per-user Windows NSIS install happen to be user-writable, which is
+// how this went unnoticed until the .deb target was added). app.getPath
+// ("userData") is Electron's own answer to "where does this app keep
+// per-user data" — resolves to ~/.config/Accrued on Linux, %APPDATA%\Accrued
+// on Windows, ~/Library/Application Support/Accrued on Mac — always writable
+// by the user running the app, regardless of where the app itself lives.
 const BACKEND_DATA_DIR = app.isPackaged
-  ? path.join(process.resourcesPath, "backend", "data")
+  ? app.getPath("userData")
   : path.join(BACKEND_DIR, "data");
 
 let backendProcess = null;

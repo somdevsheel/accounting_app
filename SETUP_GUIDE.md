@@ -211,7 +211,14 @@ Common ones:
 - **Windows**: uninstall via Settings → Apps, same as any other program.
 - **Linux, `.deb`**: `sudo apt remove accrued-accounting`.
 - **Linux, `.AppImage`**: just delete the file — nothing else was installed.
-- **Reset to a fresh company** (keep the app installed, wipe the data): delete
-  `<install dir>/resources/backend/data/company.db` — for the `.deb` that's
-  `/opt/Accrued/resources/backend/data/company.db` — or `backend/data/company.db` if running
-  from source, then relaunch — the Setup Wizard appears again like a first-ever install.
+- **Reset to a fresh company** (keep the app installed, wipe the data): delete your company
+  database, then relaunch — the Setup Wizard appears again like a first-ever install.
+  - Packaged (any install method — `.deb`, `.AppImage`, or the Windows `.exe`): delete
+    `~/.config/Accrued/company.db` (Linux/Mac: `~/Library/Application Support/Accrued/company.db`)
+    or `%APPDATA%\Accrued\company.db` (Windows).
+  - Running from source: delete `backend/data/company.db`.
+
+
+
+sudo apt install ./accrued-accounting_1.0.0_amd64.deb
+sudo apt remove accrued-accounting 

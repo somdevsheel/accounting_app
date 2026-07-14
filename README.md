@@ -145,11 +145,14 @@ happened:
 - Plain *"Backend did not become healthy in time"* with no other detail — the process started
   and kept running but never answered on port 8000; check nothing else is bound to that port.
 
-**Where user data lives once packaged**: `<install dir>/resources/backend/data/company.db`,
-regardless of whether the frozen or source backend is running — set explicitly via the
-`ACCRUED_DATA_DIR` environment variable (see `backend/database.py`) so that never changes across
-an app update, even though the frozen executable itself lives in a different folder
-(`resources/backend-dist/`).
+**Where user data lives once packaged**: Electron's own per-user data directory — `~/.config/
+Accrued/company.db` on Linux, `%APPDATA%\Accrued\company.db` on Windows, `~/Library/Application
+Support/Accrued/company.db` on Mac (`app.getPath("userData")`, set explicitly via the
+`ACCRUED_DATA_DIR` environment variable — see `backend/database.py`). **Not** inside the install
+directory itself: the `.deb` target installs to `/opt/Accrued`, owned by root, so a database
+living there would be unwritable by whichever regular user actually runs the app — this bit us
+for real the first time the `.deb` target was added (AppImage and the per-user Windows install
+happen to be user-writable, which is exactly why it went unnoticed until then).
 
 ## Tech notes
 

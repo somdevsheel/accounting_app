@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ledger — Accounting</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<div id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <img class="company-logo" id="sb-company-logo" style="display:none;" />
+      <div class="company-name" id="sb-company-name">Ledger</div>
+      <div class="company-meta" id="sb-company-meta">&nbsp;</div>
+    </div>
+    <nav id="sb-nav"></nav>
+    <div class="sidebar-footer" id="sb-user-footer" style="display:none;"></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="view-title">Dashboard</h1>
+        <div class="sub" id="view-sub"></div>
+      </div>
+      <div class="flex-row no-print">
+        <div class="export-menu" id="export-menu">
+          <button class="btn secondary small" id="export-toggle">⬇ Export</button>
+          <div class="export-menu-list" id="export-menu-list">
+            <button data-format="csv">Export as CSV</button>
+            <button data-format="xls">Export as Excel (.xls)</button>
+          </div>
+        </div>
+        <span class="text-muted" id="topbar-date" style="font-size:0.82rem;"></span>
+      </div>
+    </div>
+    <div class="view-content" id="view-content">
+      <!-- rendered by app.js -->
+    </div>
+  </main>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="/js/vendor/chart.min.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/export.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/wizard.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/accounts.js"></script>
+<script src="/js/journal.js"></script>
+<script src="/js/registers.js"></script>
+<script src="/js/reports.js"></script>
+<script src="/js/capital.js"></script>
+<script src="/js/assets_loans.js"></script>
+<script src="/js/invoices.js"></script>
+<script src="/js/recurring.js"></script>
+<script src="/js/inventory.js"></script>
+<script src="/js/payroll.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

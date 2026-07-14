@@ -210,7 +210,15 @@ function waitForBackend(timeoutMs = 30000, intervalMs = 300) {
   });
 }
 
-const LOGO_FULL_PATH = path.join(__dirname, "build", "logo-full.png");
+// electron/build/ is only used by electron-builder itself to brand the
+// installer/AppImage/exe at *build* time — it's never bundled as an app
+// resource (not in "files", and BrowserWindow's icon option needs a real file
+// on disk anyway, which an asar-packed path can't provide even if it were).
+// So at *runtime*, packaged mode must read from the extraResources copy
+// instead of a "build" folder that simply isn't there once packaged.
+const LOGO_FULL_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, "branding", "logo-full.png")
+  : path.join(__dirname, "build", "logo-full.png");
 
 function logoMarkup() {
   if (fs.existsSync(LOGO_FULL_PATH)) {
@@ -267,7 +275,9 @@ function loadingHtml() {
   );
 }
 
-const ICON_PATH = path.join(__dirname, "build", "icon.png");
+const ICON_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, "branding", "icon.png")
+  : path.join(__dirname, "build", "icon.png");
 
 async function createWindow() {
   mainWindow = new BrowserWindow({

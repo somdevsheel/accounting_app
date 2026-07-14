@@ -38,6 +38,14 @@
       {
         "from": "../frontend",
         "to": "frontend"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "branding/icon.png"
+      },
+      {
+        "from": "build/logo-full.png",
+        "to": "branding/logo-full.png"
       }
     ],
     "linux": {

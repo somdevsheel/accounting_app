@@ -17,9 +17,13 @@ for how to use the app once it's open.
 
 ### Already have the installer?
 
-1. Double-click `Accrued Setup 1.0.0.exe` and follow the installer.
-2. Launch **Accrued** from the Start Menu. First launch takes a few seconds longer (the backend
-   is starting up behind the animated splash screen) — after that it's instant.
+1. Double-click `Accrued Setup 1.0.0.exe`. It's a normal Windows installer wizard:
+   **Next** → pick an install folder (or keep the default) → **Next** → confirm the desktop/Start
+   Menu shortcuts you want → **Install** → **Finish**. No admin rights needed — it installs to
+   your own user profile, not `Program Files`.
+2. Launch **Accrued** from the Start Menu or the desktop shortcut. First launch takes a few
+   seconds longer (the backend is starting up behind the animated splash screen) — after that
+   it's instant.
 3. You'll land on the **Setup Wizard** — see [First launch](#first-launch-either-platform) below.
 
 Nothing else to install — no Python, no Node needed on this machine. The backend is bundled into

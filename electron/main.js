@@ -215,11 +215,10 @@ const LOGO_FULL_PATH = path.join(__dirname, "build", "logo-full.png");
 function logoMarkup() {
   if (fs.existsSync(LOGO_FULL_PATH)) {
     const b64 = fs.readFileSync(LOGO_FULL_PATH).toString("base64");
-    // The source artwork has a light background (not transparent), so it sits
-    // on a white card rather than directly on the dark screen — avoids ugly
-    // fringing from trying to key out a near-white background with soft,
-    // anti-aliased edges.
-    return `<div class="logo-card"><img class="logo-img" src="data:image/png;base64,${b64}" alt="Accrued" /></div>`;
+    // The artwork is transparent-background with a navy wordmark, which reads
+    // poorly directly on a dark screen — a soft glow behind it (not a hard
+    // card) keeps enough contrast for the text without boxing the logo in.
+    return `<div class="logo-glow"></div><img class="logo-img" src="data:image/png;base64,${b64}" alt="Accrued" />`;
   }
   // Text fallback so the animated startup screen still works before the real
   // logo asset is dropped into electron/build/logo-full.png.
@@ -236,11 +235,11 @@ function loadingHtml() {
           background:radial-gradient(circle at 50% 40%, #123047 0%, #0f1a2e 70%);
           color:#e7ebf1;font-family:-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden;}
         .box{text-align:center;}
-        .logo-wrap{animation:reveal 1.1s cubic-bezier(.2,.8,.2,1) both;}
-        .logo-card{background:#fdfdfd;border-radius:18px;padding:22px 30px;
-          box-shadow:0 20px 50px rgba(0,0,0,0.45),0 0 0 1px rgba(255,255,255,0.06);
-          display:inline-flex;}
-        .logo-img{display:block;max-width:320px;max-height:110px;width:auto;height:auto;}
+        .logo-wrap{position:relative;display:inline-block;animation:reveal 1.1s cubic-bezier(.2,.8,.2,1) both;}
+        .logo-glow{position:absolute;inset:-6px -10px;z-index:0;
+          background:radial-gradient(ellipse at center, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0.32) 50%, rgba(255,255,255,0) 75%);
+          filter:blur(22px);}
+        .logo-img{position:relative;z-index:1;display:block;max-width:360px;max-height:120px;width:auto;height:auto;}
         .logo-text{display:flex;flex-direction:column;align-items:center;gap:6px;}
         .logo-a{font-size:2.4rem;font-weight:800;letter-spacing:0.04em;
           background:linear-gradient(90deg,#2fb787,#5ec9d6);-webkit-background-clip:text;

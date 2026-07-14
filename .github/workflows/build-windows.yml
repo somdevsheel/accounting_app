@@ -1,0 +1,42 @@
+name: Build Windows installer
+
+# Manual only — click "Run workflow" on this workflow in the Actions tab
+# whenever you want a fresh Accrued Setup .exe. Not run automatically on every
+# push, so it doesn't burn Actions minutes without you asking for a build.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Freeze backend with PyInstaller
+        working-directory: backend
+        run: |
+          pip install -r requirements-build.txt
+          python build_backend.py
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build Windows installer
+        working-directory: electron
+        run: npm run dist
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Accrued-Windows-Installer
+          path: electron/dist/*.exe
+          if-no-files-found: error

@@ -109,6 +109,13 @@ runtime, `electron/main.js` looks for the frozen executable first (see
 present — which is what lets plain `npm start` keep working from source during development
 without freezing anything.
 
+**Don't have Python/Node on the machine you'd build Windows on?** `.github/workflows/
+build-windows.yml` builds the Windows installer on GitHub's own Windows runners — nothing to
+install locally. Push to GitHub, then in the repo's **Actions** tab select "Build Windows
+installer" → **Run workflow**. When it finishes, the `.exe` is attached to that run under
+**Artifacts** (a `.zip` containing it — download and unzip). It's manual-trigger only (not run on
+every push) so it doesn't spend Actions minutes unless you ask for a build.
+
 **Building the Windows `.exe`** specifically:
 
 - **From Windows** (required for step 1 — see the no-cross-compiling note above; also the

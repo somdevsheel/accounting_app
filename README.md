@@ -10,8 +10,9 @@ On first launch you get a Setup Wizard (company profile, owners/partners, tax co
 chart of accounts) instead of a dashboard pre-loaded with someone else's data. Nothing is
 hardcoded to a specific business.
 
-See [`USER_GUIDE.md`](USER_GUIDE.md) for day-to-day how-tos (e.g. recording an owner's capital
-contribution).
+See [`SETUP_GUIDE.md`](SETUP_GUIDE.md) for step-by-step install/build instructions on Windows and
+Linux, and [`USER_GUIDE.md`](USER_GUIDE.md) for day-to-day how-tos (e.g. recording an owner's
+capital contribution).
 
 ## Project layout
 

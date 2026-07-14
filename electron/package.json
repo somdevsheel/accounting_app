@@ -52,7 +52,7 @@
     "linux": {
       "target": ["AppImage", "deb"],
       "category": "Office",
-      "icon": "build/icon.png"
+      "icon": "build/icons"
     },
     "deb": {
       "depends": []

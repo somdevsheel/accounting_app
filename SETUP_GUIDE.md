@@ -101,18 +101,34 @@ the window (Ctrl+R) to see changes — no build step. Backend changes need the a
 
 ## Linux
 
+Two package formats are built, side by side, from the same `npm run dist` — pick whichever fits:
+
+- **`.deb`** (Debian/Ubuntu/Mint/etc.) — a real, permanent install: `sudo apt install
+  ./accrued-accounting_1.0.0_amd64.deb` puts it in your application menu with the right icon,
+  adds an `accrued-accounting` terminal command, and `sudo apt remove accrued-accounting`
+  cleanly uninstalls it later. **Use this if you want it to behave like normally-installed
+  software.**
+- **`.AppImage`** — portable, no install step, no `sudo`, runs directly from wherever the file
+  is. Good for USB sticks, non-Debian distros (Fedora, Arch, ...), or just trying it out.
+
 ### Just run it (recommended)
 
-1. Get `Accrued-1.0.0.AppImage` — either from someone else's build, or build it yourself (see
-   below; there's no Actions workflow for Linux yet, only Windows).
-2. Make it executable and run it:
-   ```bash
-   chmod +x Accrued-1.0.0.AppImage
-   ./Accrued-1.0.0.AppImage
-   ```
-   (No installation step — an AppImage runs directly. Optionally move it somewhere permanent
-   like `~/Applications/` and create a desktop shortcut.)
-3. You'll land on the **Setup Wizard** — see [First launch](#first-launch-either-platform) below.
+**`.deb` (permanent install):**
+```bash
+sudo apt install ./accrued-accounting_1.0.0_amd64.deb
+```
+Then launch **Accrued** from your application menu, or run `accrued-accounting` in a terminal.
+
+**`.AppImage` (portable, no install):**
+```bash
+chmod +x Accrued-1.0.0.AppImage
+./Accrued-1.0.0.AppImage
+```
+Optionally move it somewhere permanent like `~/Applications/` first.
+
+Either way, you'll land on the **Setup Wizard** on first launch — see
+[First launch](#first-launch-either-platform) below. (No Actions workflow builds these
+automatically yet, only Windows — build locally per the next section.)
 
 ### Build it yourself, locally
 
@@ -132,13 +148,17 @@ python3 -m venv venv
 ./venv/bin/pip install -r requirements-build.txt
 ./venv/bin/python build_backend.py
 
-# 2. Package the desktop app (bundles the frozen backend automatically)
+# 2. Package the desktop app — builds BOTH .deb and .AppImage
 cd ../electron
 npm install
 npm run dist
 ```
 
-The AppImage appears in `electron/dist/Accrued-1.0.0.AppImage`. Run it as in the section above.
+Building the `.deb` specifically needs `dpkg-deb` and `fakeroot` on the build machine (already
+present on virtually any Debian-based system; `sudo apt install fakeroot` if not).
+
+Output: `electron/dist/accrued-accounting_1.0.0_amd64.deb` and `electron/dist/Accrued-1.0.0.AppImage`.
+Run either as in the section above.
 
 ### Run from source (development only)
 
@@ -189,7 +209,9 @@ Common ones:
 ## Uninstalling / starting over
 
 - **Windows**: uninstall via Settings → Apps, same as any other program.
-- **Linux**: just delete the `.AppImage` file — nothing else was installed.
+- **Linux, `.deb`**: `sudo apt remove accrued-accounting`.
+- **Linux, `.AppImage`**: just delete the file — nothing else was installed.
 - **Reset to a fresh company** (keep the app installed, wipe the data): delete
-  `<install dir>/resources/backend/data/company.db` (packaged) or `backend/data/company.db`
-  (running from source), then relaunch — the Setup Wizard appears again like a first-ever install.
+  `<install dir>/resources/backend/data/company.db` — for the `.deb` that's
+  `/opt/Accrued/resources/backend/data/company.db` — or `backend/data/company.db` if running
+  from source, then relaunch — the Setup Wizard appears again like a first-ever install.

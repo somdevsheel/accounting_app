@@ -5,7 +5,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# ACCRUED_DATA_DIR lets the Electron shell pin this to a stable, writable
+# location (e.g. the OS user-data folder) when the backend is a frozen
+# executable — a PyInstaller build's own directory isn't a reliable place to
+# keep a database, since it can sit inside a temp extraction path.
+DATA_DIR = os.environ.get("ACCRUED_DATA_DIR") or os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "company.db")
 DATABASE_URL = f"sqlite:///{DB_PATH}"

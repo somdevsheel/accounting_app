@@ -12,9 +12,12 @@ from database import SessionLocal, init_db
 from routers import accounts, assets, auth, inventory, invoices, journal, loans, masters, payroll, recurring, reports, setup
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend"))
+# ACCRUED_FRONTEND_DIR lets the Electron shell tell a frozen backend exactly
+# where the static frontend was unpacked to, since a PyInstaller build's own
+# location is not a reliable base for a "../frontend" relative path.
+FRONTEND_DIR = os.environ.get("ACCRUED_FRONTEND_DIR") or os.path.normpath(os.path.join(BASE_DIR, "..", "frontend"))
 
-app = FastAPI(title="Ledger - Desktop Accounting")
+app = FastAPI(title="Accrued - Desktop Accounting Software")
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,8 +1,9 @@
 {
-  "name": "ledger-accounting",
-  "productName": "Ledger",
+  "name": "accrued-accounting",
+  "productName": "Accrued",
   "version": "1.0.0",
-  "description": "Local-first desktop accounting app — double-entry bookkeeping for any small business.",
+  "description": "Accrued — local-first desktop accounting software — double-entry bookkeeping for any small business.",
+  "author": "Somdev Sheel <somdevsheel7@gmail.com>",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -14,8 +15,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.ledger.accounting",
-    "productName": "Ledger",
+    "appId": "com.accrued.accounting",
+    "productName": "Accrued",
     "directories": {
       "output": "dist"
     },
@@ -28,7 +29,11 @@
       {
         "from": "../backend",
         "to": "backend",
-        "filter": ["**/*", "!venv", "!data/*.db", "!**/__pycache__/**"]
+        "filter": ["**/*", "!venv", "!dist", "!build", "!*.spec", "!data/*.db", "!**/__pycache__/**"]
+      },
+      {
+        "from": "../backend/dist/accrued-backend",
+        "to": "backend-dist/accrued-backend"
       },
       {
         "from": "../frontend",
@@ -37,14 +42,17 @@
     ],
     "linux": {
       "target": ["AppImage"],
-      "category": "Office"
+      "category": "Office",
+      "icon": "build/icon.png"
     },
     "mac": {
       "target": ["dmg"],
-      "category": "public.app-category.finance"
+      "category": "public.app-category.finance",
+      "icon": "build/icon.icns"
     },
     "win": {
-      "target": ["nsis"]
+      "target": ["nsis"],
+      "icon": "build/icon.ico"
     }
   }
 }

@@ -9,18 +9,49 @@ const Export = (() => {
     return cell.textContent.replace(/\s+/g, " ").trim();
   }
 
+  function nearestPrecedingHeading(table) {
+    // Walk up from the table's wrapper, checking each level's preceding siblings
+    // (and anything nested in them) for the closest heading above the table —
+    // not just "any h3 in the same card", which breaks when a card holds more
+    // than one table (e.g. Balance Sheet: Liabilities and Capital share a card).
+    let node = table.closest(".table-wrap") || table;
+    while (node && node.id !== "view-content") {
+      let sib = node.previousElementSibling;
+      while (sib) {
+        if (/^H[1-4]$/.test(sib.tagName)) return sib.textContent.trim();
+        const heading = sib.querySelector && sib.querySelector("h1,h2,h3,h4");
+        if (heading) return heading.textContent.trim();
+        sib = sib.previousElementSibling;
+      }
+      node = node.parentElement;
+    }
+    return "";
+  }
+
   function findSections(root) {
     const tables = root.querySelectorAll("table");
     const sections = [];
     tables.forEach((table) => {
       if (table.closest("#modal-root")) return; // never export a background modal's table
-      let title = "";
-      let prev = table.closest(".card") ? table.closest(".card").querySelector("h3") : table.previousElementSibling;
-      if (prev && /^H[1-4]$/.test(prev.tagName)) title = prev.textContent.trim();
+
+      // Columns with a blank header are this app's consistent convention for an
+      // "actions" column (Edit/Delete buttons) — drop those from the export so
+      // button labels don't show up as data. Only applied to rows whose cell
+      // count matches the header exactly, so a colspan'd "Total" footer row
+      // (fewer cells than the header) is left untouched rather than misaligned.
+      const headerCells = Array.from(table.querySelectorAll("thead tr")[0] ? table.querySelectorAll("thead tr")[0].children : []);
+      const skipIndices = new Set(headerCells.map((c, i) => (cellText(c) === "" ? i : -1)).filter((i) => i >= 0));
+      const toRow = (tr) => {
+        const cells = Array.from(tr.children);
+        const filtered = cells.length === headerCells.length ? cells.filter((_, i) => !skipIndices.has(i)) : cells;
+        return filtered.map(cellText);
+      };
+
+      const title = nearestPrecedingHeading(table);
       const rows = [];
-      table.querySelectorAll("thead tr").forEach((tr) => rows.push(Array.from(tr.children).map(cellText)));
-      table.querySelectorAll("tbody tr").forEach((tr) => rows.push(Array.from(tr.children).map(cellText)));
-      table.querySelectorAll("tfoot tr").forEach((tr) => rows.push(Array.from(tr.children).map(cellText)));
+      table.querySelectorAll("thead tr").forEach((tr) => rows.push(toRow(tr)));
+      table.querySelectorAll("tbody tr").forEach((tr) => rows.push(toRow(tr)));
+      table.querySelectorAll("tfoot tr").forEach((tr) => rows.push(toRow(tr)));
       if (rows.length > 0) sections.push({ title, rows });
     });
     return sections;

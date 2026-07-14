@@ -1,4 +1,4 @@
-# Ledger — Local-First Desktop Accounting
+# Accrued — Local-First Desktop Accounting Software
 
 A lightweight, self-hostable double-entry accounting app for small and medium businesses.
 Everything runs on your own machine — a Python/FastAPI backend, a plain HTML/CSS/JS frontend,
@@ -80,36 +80,68 @@ next launch, exactly like a first-ever install.
 
 ## Packaging into an installer (Windows .exe, macOS .dmg, Linux AppImage)
 
-`electron/package.json` has an `electron-builder` config already targeting `nsis` (Windows),
-`dmg` (macOS) and `AppImage` (Linux). To build:
+The packaged app is **fully standalone** — no separate Python install, no `pip install`, nothing
+for whoever installs it to set up. This works by freezing the backend into a native executable
+with PyInstaller and bundling that instead of Python source. Building has two steps:
+
+**1. Freeze the backend** (once per target OS — PyInstaller does not cross-compile, so a build
+done on Linux only runs on Linux, a build done on Windows only runs on Windows, etc.):
+
+```bash
+cd backend
+./venv/bin/pip install -r requirements-build.txt   # venv\Scripts\pip on Windows
+./venv/bin/python build_backend.py                  # venv\Scripts\python on Windows
+```
+
+This produces `backend/dist/accrued-backend/` — a self-contained folder with the Python
+interpreter, every dependency, and the app itself already baked in.
+
+**2. Package the Electron shell**, which bundles that frozen output automatically:
 
 ```bash
 cd electron
 npm run dist
 ```
 
-The installer is written to `electron/dist/` (e.g. `Ledger Setup 1.0.0.exe` on Windows).
+The installer is written to `electron/dist/` (e.g. `Accrued Setup 1.0.0.exe` on Windows). At
+runtime, `electron/main.js` looks for the frozen executable first (see
+`resolveBackendCommand()`) and only falls back to a system/venv Python if no frozen build is
+present — which is what lets plain `npm start` keep working from source during development
+without freezing anything.
 
-**Building the Windows `.exe`:**
+**Building the Windows `.exe`** specifically:
 
-- **From Windows** (recommended, no extra setup): run `npm run dist` directly on a Windows
-  machine with Node.js installed. This is the simplest path and produces a working NSIS
-  installer.
-- **Cross-building from Linux/macOS**: electron-builder can produce a Windows installer from
-  Linux, but needs `wine` for the code-signing/resource-editing step. Install it first
-  (`sudo apt install wine` on Debian/Ubuntu, `brew install --cask wine-stable` on macOS), then
-  run `npm run dist` from `electron/` as above. Without `wine` the build fails at the "signing"
-  step with `wine is required`.
+- **From Windows** (required for step 1 — see the no-cross-compiling note above; also the
+  simplest path for step 2): run both steps directly on a Windows machine with Python 3.10+ and
+  Node.js installed.
+- **Cross-building step 2 from Linux/macOS** (only relevant if you already have a Windows-built
+  `backend/dist/accrued-backend/` from step 1, e.g. copied over from a Windows machine):
+  electron-builder needs `wine` for the code-signing/resource-editing step
+  (`sudo apt install wine` on Debian/Ubuntu, `brew install --cask wine-stable` on macOS). Without
+  it the build fails at the "signing" step with `wine is required`.
 
-**Important caveat — Python is not bundled.** `extraResources` in `electron/package.json`
-explicitly excludes `venv` from the packaged app, so the installer ships the backend *source*
-but not a Python interpreter. `electron/main.js` falls back to whatever `python`/`python3` it
-finds on the target machine's PATH (see `resolvePythonExecutable()`), so anyone installing the
-`.exe` today still needs Python 3.10+ installed system-wide with `pip install -r
-requirements.txt` run once. To make a truly standalone installer (no separate Python install
-required), freeze the backend with PyInstaller into a single executable and point
-`electron/main.js` at that binary instead of `python -m uvicorn` — that's the next step if
-fully standalone packaging is needed, but it's out of scope for now.
+**If the app shows "Failed to start backend"** — since a packaged, double-clicked `.exe` has no
+visible console, `main.js` captures the backend's stdout/stderr and surfaces it directly in that
+error screen instead of just a generic timeout, so the message you see should say what actually
+happened:
+- *"Could not launch the bundled backend executable..."* — the frozen build exists but failed to
+  start (antivirus quarantine, corrupted install). Try reinstalling.
+- *"Could not find a Python interpreter..."* — no frozen backend was bundled **and** no Python
+  was found on the machine either. This means step 1 above was skipped before packaging; freeze
+  the backend and rebuild.
+- *"Port 8000 is already being used..."* — something else on the machine already has port 8000
+  (this is detected from the actual bind error, not guessed).
+- *"...exited immediately (code N)..."* with a Python traceback — only possible when running
+  from source (no frozen build); almost always `ModuleNotFoundError`, fixed by `pip install -r
+  requirements.txt` from `backend/`.
+- Plain *"Backend did not become healthy in time"* with no other detail — the process started
+  and kept running but never answered on port 8000; check nothing else is bound to that port.
+
+**Where user data lives once packaged**: `<install dir>/resources/backend/data/company.db`,
+regardless of whether the frozen or source backend is running — set explicitly via the
+`ACCRUED_DATA_DIR` environment variable (see `backend/database.py`) so that never changes across
+an app update, even though the frozen executable itself lives in a different folder
+(`resources/backend-dist/`).
 
 ## Tech notes
 

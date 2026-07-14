@@ -4,6 +4,11 @@ backend/__pycache__/
 backend/**/__pycache__/
 *.pyc
 
+# PyInstaller frozen backend build output (platform-specific — rebuild per OS)
+backend/build/
+backend/dist/
+backend/*.spec
+
 # Database (local company data — never commit real financial data)
 backend/data/*.db
 backend/data/*.db-journal

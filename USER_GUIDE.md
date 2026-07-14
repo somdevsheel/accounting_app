@@ -1,6 +1,6 @@
 # User Guide
 
-Everyday how-tos for using Ledger. For installing/running the app, see `README.md`.
+Everyday how-tos for using Accrued. For installing/running the app, see `README.md`.
 
 ## Contents
 

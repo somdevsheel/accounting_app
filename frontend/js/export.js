@@ -114,7 +114,14 @@ const Export = (() => {
   }
 
   function download(filename, content, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
+    // Both Excel's SpreadsheetML parser and its CSV importer default to the
+    // system's local codepage instead of UTF-8 when a file has no byte-order
+    // mark — the XML's own <?xml ... encoding="UTF-8"?> declaration isn't
+    // enough on its own. Without this, any non-ASCII character (currency
+    // symbols, non-Latin narrations) comes out as mojibake (e.g. "₹" ->
+    // "â‚¹"). Blob doesn't add one for a plain string, so it has to be
+    // prepended explicitly.
+    const blob = new Blob(["﻿", content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

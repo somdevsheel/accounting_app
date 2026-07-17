@@ -1,8 +1,10 @@
 /* Generic "export whatever table is on screen" — works for every report/register
    without each screen needing its own export code. Reads the rendered DOM table(s)
    directly, so it always matches what's visible. No dependencies: CSV is plain
-   text, and the "Excel" format is the standard HTML-table-as-.xls trick that
-   Excel, Numbers, and LibreOffice all open natively. */
+   text, and "Excel" is genuine SpreadsheetML XML (Microsoft's native Excel XML
+   schema, supported since Excel 2003) — not an HTML table wearing a .xls
+   extension, which modern Excel increasingly refuses to open or buries behind
+   a scary format-mismatch warning. */
 
 const Export = (() => {
   function cellText(cell) {
@@ -72,19 +74,43 @@ const Export = (() => {
     return lines.join("\r\n");
   }
 
-  function toXlsHtml(sections, docTitle) {
-    const tables = sections.map((section) => {
-      const rowsHtml = section.rows.map((row) => `<tr>${row.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("");
-      const titleHtml = section.title ? `<tr><td style="font-weight:bold;">${escapeHtml(section.title)}</td></tr>` : "";
-      return `<table border="1">${titleHtml}${rowsHtml}</table><br/>`;
+  function xmlEscape(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function toSpreadsheetXml(sections, docTitle) {
+    // A worksheet name has to be <=31 chars and can't contain : \ / ? * [ ]
+    const sheetName = (docTitle || "Export").replace(/[:\\/?*[\]]/g, " ").slice(0, 31) || "Export";
+    const rowsXml = sections.map((section, i) => {
+      const parts = [];
+      if (i > 0) parts.push("<Row/>"); // blank spacer row between sections
+      if (section.title) {
+        parts.push(`<Row><Cell ss:StyleID="sTitle"><Data ss:Type="String">${xmlEscape(section.title)}</Data></Cell></Row>`);
+      }
+      section.rows.forEach((row) => {
+        const cells = row.map((c) => `<Cell><Data ss:Type="String">${xmlEscape(c)}</Data></Cell>`).join("");
+        parts.push(`<Row>${cells}</Row>`);
+      });
+      return parts.join("");
     }).join("");
-    return `<?xml version="1.0"?>
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
-<html xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-<x:Name>${escapeHtml(docTitle)}</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-<body>${tables}</body></html>`;
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="sTitle"><Font ss:Bold="1"/></Style>
+ </Styles>
+ <Worksheet ss:Name="${xmlEscape(sheetName)}">
+  <Table>${rowsXml}</Table>
+ </Worksheet>
+</Workbook>`;
   }
 
   function download(filename, content, mimeType) {
@@ -112,7 +138,7 @@ const Export = (() => {
     if (format === "csv") {
       download(`${slug}-${datePart}.csv`, toCsv(sections), "text/csv;charset=utf-8;");
     } else {
-      download(`${slug}-${datePart}.xls`, toXlsHtml(sections, title), "application/vnd.ms-excel;charset=utf-8;");
+      download(`${slug}-${datePart}.xls`, toSpreadsheetXml(sections, title), "application/vnd.ms-excel;charset=utf-8;");
     }
     toast(`Exported ${title} as ${format.toUpperCase()}`);
   }

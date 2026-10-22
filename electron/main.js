@@ -3,12 +3,22 @@ const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
+const net = require("net");
 
 const BACKEND_DIR = path.join(__dirname, "..", "backend");
 const HOST = "127.0.0.1";
-const PORT = 8000;
-const HEALTH_URL = `http://${HOST}:${PORT}/api/health`;
-const APP_URL = `http://${HOST}:${PORT}/`;
+// Not 8000: that's the default for countless local dev servers (uvicorn,
+// Django, ...), so a fixed 8000 collides with whatever else the user runs.
+// An uncommon preferred port that stays the same launch to launch matters
+// too — the page's origin includes the port, and localStorage (the saved
+// login token) is per-origin, so a different port every time would log the
+// user out on every launch. Only if it's taken do we walk forward, and as a
+// last resort let the OS pick any free port.
+const PREFERRED_PORT = 47820;
+const PORT_SEARCH_SPAN = 20;
+let PORT = PREFERRED_PORT;
+const healthUrl = () => `http://${HOST}:${PORT}/api/health`;
+const appUrl = () => `http://${HOST}:${PORT}/`;
 const FROZEN_EXE_NAME = process.platform === "win32" ? "accrued-backend.exe" : "accrued-backend";
 
 // Packaged layout puts the frozen backend and the frontend as siblings of
@@ -38,6 +48,33 @@ const BACKEND_FRONTEND_DIR = app.isPackaged
 const BACKEND_DATA_DIR = app.isPackaged
   ? app.getPath("userData")
   : path.join(BACKEND_DIR, "data");
+
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once("error", () => resolve(false));
+    srv.once("listening", () => srv.close(() => resolve(true)));
+    srv.listen(port, HOST);
+  });
+}
+
+function osAssignedPort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once("error", reject);
+    srv.listen(0, HOST, () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+async function pickPort() {
+  for (let port = PREFERRED_PORT; port < PREFERRED_PORT + PORT_SEARCH_SPAN; port++) {
+    if (await isPortFree(port)) return port;
+  }
+  return osAssignedPort();
+}
 
 let backendProcess = null;
 let mainWindow = null;
@@ -107,10 +144,9 @@ function spawnBackend({ cmd, args, cwd }) {
 function diagnoseBackendFailure(output) {
   if (/address already in use|Errno 98|Errno 10048|WinError 10048/i.test(output)) {
     return (
-      `Port ${PORT} is already being used by another program on this machine ` +
-      "(another local server, or a previous copy of this app that didn't fully close). " +
-      `Close whatever else is using port ${PORT} and restart Accrued, or change the port ` +
-      "this app uses in electron/main.js (PORT) and backend/main.py if that keeps happening."
+      `Port ${PORT} was free a moment ago but another program grabbed it while Accrued was ` +
+      "starting (or a previous copy of this app hadn't fully closed). Restart Accrued — it " +
+      "picks a free port automatically on every launch."
     );
   }
   if (/ModuleNotFoundError|No module named/i.test(output)) {
@@ -191,7 +227,7 @@ function waitForBackend(timeoutMs = 30000, intervalMs = 300) {
         reject(new Error(backendStartupError));
         return;
       }
-      const req = http.get(HEALTH_URL, (res) => {
+      const req = http.get(healthUrl(), (res) => {
         if (res.statusCode === 200) {
           res.resume();
           resolve();
@@ -306,7 +342,7 @@ async function createWindow() {
 
   try {
     await waitForBackend();
-    await mainWindow.loadURL(APP_URL);
+    await mainWindow.loadURL(appUrl());
   } catch (err) {
     mainWindow.loadURL(
       "data:text/html;charset=utf-8," +
@@ -328,7 +364,8 @@ function killBackend() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  PORT = await pickPort();
   startBackend();
   createWindow();
 

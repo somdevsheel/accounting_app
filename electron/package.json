@@ -66,6 +66,16 @@
       "target": ["nsis"],
       "icon": "build/icon.ico"
     },
+    "appx": {
+      "applicationId": "Accrued",
+      "displayName": "Accrued",
+      "publisherDisplayName": "ARUTECH CONSULTANCY",
+      "identityName": "REPLACE_WITH_PARTNER_CENTER_PACKAGE_IDENTITY_NAME",
+      "publisher": "CN=REPLACE_WITH_PARTNER_CENTER_PUBLISHER_ID",
+      "backgroundColor": "#ffffff",
+      "languages": ["en-US"],
+      "showNameOnTiles": false
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,

@@ -1,0 +1,62 @@
+name: Build Microsoft Store package (MSIX/AppX)
+
+# Manual only, like the .exe workflow. Produces the package to upload to Partner
+# Center. Store-distributed MSIX/AppX packages are signed by Microsoft on
+# ingestion, which is what satisfies Store policy 10.2.9 without buying a
+# code-signing certificate (the plain NSIS .exe would need one).
+#
+# One-time setup — copy these from Partner Center → your app → Product
+# management → Product identity, into GitHub → Settings → Secrets and variables
+# → Actions → Variables tab:
+#   MSSTORE_IDENTITY_NAME  = "Package/Identity/Name"      (e.g. 12345ArutechConsultancy.Accrued)
+#   MSSTORE_PUBLISHER      = "Package/Identity/Publisher" (e.g. CN=1A2B3C4D-....)
+# The Store rejects a package whose identity doesn't match those exactly.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Partner Center identity is configured
+        shell: bash
+        run: |
+          if [ -z "${{ vars.MSSTORE_IDENTITY_NAME }}" ] || [ -z "${{ vars.MSSTORE_PUBLISHER }}" ]; then
+            echo "::error::Set repository variables MSSTORE_IDENTITY_NAME and MSSTORE_PUBLISHER (see the comment at the top of this workflow)."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Freeze backend with PyInstaller
+        working-directory: backend
+        run: |
+          pip install -r requirements-build.txt
+          python build_backend.py
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build AppX package
+        working-directory: electron
+        shell: bash
+        run: >
+          npx electron-builder --win appx --publish never
+          "-c.appx.identityName=${{ vars.MSSTORE_IDENTITY_NAME }}"
+          "-c.appx.publisher=${{ vars.MSSTORE_PUBLISHER }}"
+
+      - name: Upload Store package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Accrued-MSStore-Package
+          path: electron/dist/*.appx
+          if-no-files-found: error

@@ -168,6 +168,75 @@ Per explicit request to discuss without building:
   the product *is* the server) that doesn't map cleanly onto a local-first desktop app without
   becoming a bigger "should this also be a hosted product" decision.
 
+## Bug sweep: functions and UI
+
+A full read-through of every router, accounting module and screen. Each fix was confirmed against
+a throwaway database (backend over HTTP, frontend driven in headless Chrome with an IST
+timezone), and the UI checks were also run against the pre-fix frontend to make sure they caught
+the original bugs.
+
+**Wrong numbers**
+- **Dates off by a day outside UTC.** `todayStr()` and the report period ranges used
+  `toISOString()`, which converts to UTC first. In India, "This Financial Year" ran
+  31 Mar → 30 Mar and "today" could be yesterday. Now uses local dates (`isoDate()` in `api.js`).
+- **Date-filtered General Ledger / Cash Book / Bank Book** started the running balance at zero,
+  ignoring everything before the start date. They now carry an opening balance (shown as a row).
+- **Saved bank reconciliations** compared the book balance with the *raw* statement balance, so
+  any uncleared item was recorded as a discrepancy, unlike the on-screen preview. Both now use the
+  same adjusted figure.
+- **Renaming the tax** (e.g. GST → VAT) left the `GST Payable` / `GST Input Credit` accounts
+  under the old name, so the Tax Register went blank. Those accounts are now renamed with it.
+
+**Stock**
+- **Deleting an invoice** didn't put back the stock it had deducted. It does now, and a quote
+  that was converted into it becomes convertible again (previously the delete failed with a 500).
+- **Quote → Invoice conversion** and **recurring invoices** dropped the item link, so they never
+  deducted stock. All three paths now share `add_invoice_items()`.
+- **Stock movements**: Sale always reduces stock and Opening/Purchase always increase it,
+  whatever sign is typed. Only Adjustment takes a signed quantity.
+
+**Crashes / broken screens**
+- **Foreign-currency (🌐) toggle** on a journal line threw a TypeError while binding the form,
+  leaving Add Line and Save dead.
+- **After logging in** (or logging out and back in) the sidebar and topbar stayed hidden. After
+  the setup wizard, the main area also lost its padding.
+- **Dispose fixed asset** used `window.prompt()`, which Electron doesn't implement, so the button
+  did nothing in the desktop app. It's now a modal.
+- **Setup wizard** failed with a 500 when two accounts were left with blank codes (both got the
+  same auto-code, since the session doesn't autoflush).
+- **500s turned into clear 400 messages**: deleting a tax rate that's in use; changing an account
+  code or item SKU to one already taken; deleting an account linked to an owner, asset, loan or
+  reconciliation; malformed bank-import rows.
+
+**Guard rails**
+- The last active Admin can no longer demote themselves to Accountant/Viewer (that locked
+  everyone out of Users & Access). Role values are validated on update.
+- Recurring templates now catch up on every run missed while the app was closed (capped at 60
+  runs), instead of producing one per launch.
+- Bank statement import: handles the UTF-8 BOM that Excel adds to CSVs (it hid the Date column)
+  and `(1,234.50)`-style negatives.
+- Payroll: refuses to post when deductions exceed gross pay (it would have posted an unbalanced
+  entry), and validates the month format.
+- Validation of company name, FY start month (1–12), tax rate (0–100), owner share %, asset
+  residual ≤ cost, loan tenure, and invoice due date ≥ document date.
+
+**UI**
+- Invoices, receipts, quotes and POs get a status dropdown in the list, since a document
+  previously stayed "Unpaid" forever. There's also a Notes field, printed on the document.
+- Escape closes any modal. Save buttons disable while posting, to prevent double entries on a
+  double click.
+- Any API failure without its own handler now shows an error toast instead of failing silently.
+- New-document, recurring-template and journal modals keep what's been typed when a line is
+  added or removed. Pickers show only active customers and vendors. An inactive account still
+  shows on an old journal line being edited.
+- New accounts get a default category and normal balance from their type. Partial payments show
+  an amber badge in the registers. Print labels match the document type ("Vendor",
+  "Expected Delivery", "Valid Until"). The void-entry prompt reads properly.
+
+**Deliberately left alone**: recurring dates set to the 29th–31st drift to the 28th after a
+short month (needs an anchor-day column); Customer/Vendor "Outstanding" counts Partial entries at
+their full amount (there's no partial-payment amount stored to subtract).
+
 ## Current state / open items
 
 - Windows `.exe` build has not been visually confirmed on a real Windows machine by anyone other

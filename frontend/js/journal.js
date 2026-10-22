@@ -67,7 +67,7 @@ const JournalView = (() => {
     container.querySelectorAll(".j-view").forEach((btn) => btn.addEventListener("click", () => viewEntry(Number(btn.dataset.id))));
     container.querySelectorAll(".j-edit").forEach((btn) => btn.addEventListener("click", () => openEntryModal(container, Number(btn.dataset.id))));
     container.querySelectorAll(".j-void").forEach((btn) => btn.addEventListener("click", async () => {
-      if (!confirm("Void this journal entry? It stays in history but drops out of live balances... actually it is excluded from reports.")) return;
+      if (!confirm("Void this journal entry? It stays in the history (tick \"Show voided\" to see it) but is excluded from all balances and reports. You can unvoid it later.")) return;
       await Api.voidJournalEntry(Number(btn.dataset.id));
       toast("Entry voided");
       refresh(container);
@@ -192,8 +192,11 @@ const JournalView = (() => {
     };
 
     function accountOptions(selected) {
-      return `<option value="">Select account…</option>` + State.activeAccounts().map((a) =>
-        `<option value="${a.id}" ${Number(selected) === a.id ? "selected" : ""}>${escapeHtml(a.code)} — ${escapeHtml(a.name)}</option>`).join("");
+      // Keep an account that's since been deactivated visible on the line that
+      // uses it, so editing an old entry doesn't silently blank its account.
+      const accounts = State.accounts.filter((a) => a.is_active || Number(selected) === a.id);
+      return `<option value="">Select account…</option>` + accounts.map((a) =>
+        `<option value="${a.id}" ${Number(selected) === a.id ? "selected" : ""}>${escapeHtml(a.code)} — ${escapeHtml(a.name)}${a.is_active ? "" : " (inactive)"}</option>`).join("");
     }
 
     function taxOptions(selected) {
@@ -286,7 +289,9 @@ const JournalView = (() => {
       document.getElementById("je-status").addEventListener("change", (ev) => { header.payment_status = ev.target.value; });
       document.getElementById("je-narration").addEventListener("input", (ev) => { header.narration = ev.target.value; });
       const body = document.getElementById("je-lines-body");
-      body.querySelectorAll("tr").forEach((row) => {
+      // Main line rows only — the foreign-currency sub-rows share data-i but have
+      // none of these inputs, and are bound separately below.
+      body.querySelectorAll("tr:not(.fx-subrow)").forEach((row) => {
         const i = Number(row.dataset.i);
         row.querySelector(".jl-account").addEventListener("change", (ev) => { lines[i].account_id = ev.target.value; });
         row.querySelector(".jl-desc").addEventListener("input", (ev) => { lines[i].description = ev.target.value; });
@@ -392,6 +397,9 @@ const JournalView = (() => {
           })),
       };
       if (!payload.date) { toast("Date is required", true); return; }
+      if (payload.lines.length < 2) { toast("Pick an account and amount on at least 2 lines", true); return; }
+      const saveBtn = document.getElementById("je-save");
+      saveBtn.disabled = true; // guard against double-posting on a double click
       try {
         if (entry) await Api.updateJournalEntry(entry.id, payload);
         else await Api.createJournalEntry(payload);
@@ -399,6 +407,7 @@ const JournalView = (() => {
         App.closeModal();
         refresh(container);
       } catch (err) {
+        saveBtn.disabled = false;
         toast(err.message, true);
       }
     }
@@ -410,6 +419,10 @@ const JournalView = (() => {
 })();
 
 /* ---------------- General Ledger ---------------- */
+
+function openingBalanceRow(amount, colspan) {
+  return `<tr class="opening-row"><td colspan="${colspan - 1}"><em>Opening Balance</em></td><td class="num">${fmtMoney(amount)}</td></tr>`;
+}
 
 const LedgerView = (() => {
   async function render(container) {
@@ -436,8 +449,8 @@ const LedgerView = (() => {
       const end = document.getElementById("gl-end").value || undefined;
       const data = await Api.generalLedger(Number(accId), { start_date: start, as_of: end });
       const results = document.getElementById("gl-results");
-      if (data.lines.length === 0) {
-        results.innerHTML = emptyState("📒", "No activity", "No journal lines have been posted to this account yet.");
+      if (data.lines.length === 0 && !data.opening_balance) {
+        results.innerHTML = emptyState("📒", "No activity", start || end ? "No journal lines were posted to this account in this period." : "No journal lines have been posted to this account yet.");
         return;
       }
       results.innerHTML = `
@@ -445,6 +458,7 @@ const LedgerView = (() => {
           <table>
             <thead><tr><th>Date</th><th>Voucher No.</th><th>Particulars</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Running Balance</th></tr></thead>
             <tbody>
+              ${start ? openingBalanceRow(data.opening_balance, 6) : ""}
               ${data.lines.map((l) => `
                 <tr>
                   <td>${fmtDate(l.date)}</td>

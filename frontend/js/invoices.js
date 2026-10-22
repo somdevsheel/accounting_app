@@ -9,7 +9,22 @@ const STATUS_OPTIONS_BY_TYPE = {
 };
 const STATUS_GOOD = new Set(["Paid", "Accepted", "Received", "Converted"]);
 
+function statusBadgeHtml(status) {
+  return STATUS_GOOD.has(status) ? `<span class="badge green">${escapeHtml(status)}</span>` : `<span class="badge gray">${escapeHtml(status)}</span>`;
+}
+
 function docTypeView(docType, icon) {
+  // Status is editable straight from the list (e.g. mark an invoice Paid). A
+  // converted quote is locked — its status is set by the conversion itself.
+  function statusCell(inv) {
+    if (inv.converted_invoice_id) return statusBadgeHtml(inv.status);
+    const options = STATUS_OPTIONS_BY_TYPE[docType].filter((st) => st !== "Converted");
+    if (!options.includes(inv.status)) options.unshift(inv.status);
+    return `<select class="doc-status-select" data-id="${inv.id}" style="width:auto;padding:4px 8px;font-size:0.8rem;">
+      ${options.map((st) => `<option ${st === inv.status ? "selected" : ""}>${escapeHtml(st)}</option>`).join("")}
+    </select>`;
+  }
+
   const usesCustomer = CUSTOMER_DOC_TYPES.includes(docType);
   const canGenerateFromEntry = docType === "Invoice" || docType === "Receipt";
   const canConvert = docType === "Quote";
@@ -36,7 +51,7 @@ function docTypeView(docType, icon) {
                     <td>${i.invoice_no}</td><td>${fmtDate(i.date)}</td>
                     <td>${escapeHtml(i.customer_name || i.vendor_name || "—")}</td>
                     <td class="num">${fmtMoney(i.subtotal)}</td><td class="num">${fmtMoney(i.tax_amount)}</td><td class="num">${fmtMoney(i.total)}</td>
-                    <td>${STATUS_GOOD.has(i.status) ? `<span class="badge green">${escapeHtml(i.status)}</span>` : `<span class="badge gray">${escapeHtml(i.status)}</span>`}</td>
+                    <td>${statusCell(i)}</td>
                     <td>
                     ${canConvert && !i.converted_invoice_id ? `<button class="btn secondary small doc-convert" data-id="${i.id}">Convert to Invoice</button>` : ""}
                     ${canConvert && i.converted_invoice_id ? `<span class="text-muted" style="font-size:0.78rem;">Converted</span>` : ""}
@@ -60,8 +75,18 @@ function docTypeView(docType, icon) {
           toast(err.message, true);
         }
       }));
+      container.querySelectorAll(".doc-status-select").forEach((sel) => sel.addEventListener("change", async () => {
+        try {
+          await Api.updateInvoiceStatus(Number(sel.dataset.id), sel.value);
+          toast(`Marked as ${sel.value}`);
+        } catch (err) {
+          toast(err.message, true);
+          this.render(container);
+        }
+      }));
       container.querySelectorAll(".doc-delete").forEach((btn) => btn.addEventListener("click", async () => {
-        if (!confirm(`Delete this ${docType.toLowerCase()}?`)) return;
+        const restoresStock = docType === "Invoice" ? " Any stock it deducted will be added back." : "";
+        if (!confirm(`Delete this ${docType.toLowerCase()}?${restoresStock}`)) return;
         await Api.deleteInvoice(Number(btn.dataset.id));
         toast(`${docType} deleted`);
         this.render(container);
@@ -92,7 +117,11 @@ function docTypeView(docType, icon) {
     document.getElementById("m-cancel").addEventListener("click", App.closeModal);
     document.getElementById("doc-generate").addEventListener("click", async () => {
       const entryId = Number(document.getElementById("doc-entry-select").value);
-      const invoice = await Api.generateInvoiceFromEntry(entryId, docType);
+      document.getElementById("doc-generate").disabled = true;
+      const invoice = await Api.generateInvoiceFromEntry(entryId, docType).finally(() => {
+        const btn = document.getElementById("doc-generate");
+        if (btn) btn.disabled = false;
+      });
       toast(`${docType} ${invoice.invoice_no} generated`);
       App.closeModal();
       docTypeView(docType, icon).render(container);
@@ -100,8 +129,12 @@ function docTypeView(docType, icon) {
   }
 
   async function openManualModal(container) {
-    const [customers, vendors] = await Promise.all([Api.listCustomers(), Api.listVendors()]);
+    const [customers, vendors] = (await Promise.all([Api.listCustomers(), Api.listVendors()]))
+      .map((list) => list.filter((p) => p.is_active));
     let items = [{ description: "", quantity: 1, rate: 0, tax_rate_percent: 0, item_id: null }];
+    // Header fields live here so re-rendering the modal (adding/removing a line)
+    // doesn't wipe what's already been typed.
+    const header = { party: "", date: todayStr(), due: "", status: STATUS_OPTIONS_BY_TYPE[docType][0], notes: "" };
 
     function totals() {
       let subtotal = 0, tax = 0;
@@ -120,16 +153,17 @@ function docTypeView(docType, icon) {
         <div class="form-grid" style="margin-bottom:14px;">
           ${usesCustomer ? `
           <div class="field"><label>Customer</label>
-            <select id="doc-party"><option value="">—</option>${customers.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")}</select>
+            <select id="doc-party"><option value="">—</option>${customers.map((c) => `<option value="${c.id}" ${String(c.id) === header.party ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</select>
           </div>` : `
           <div class="field"><label>Vendor / Payee</label>
-            <select id="doc-party"><option value="">—</option>${vendors.map((v) => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join("")}</select>
+            <select id="doc-party"><option value="">—</option>${vendors.map((v) => `<option value="${v.id}" ${String(v.id) === header.party ? "selected" : ""}>${escapeHtml(v.name)}</option>`).join("")}</select>
           </div>`}
-          <div class="field"><label>Date</label><input type="date" id="doc-date" value="${todayStr()}" /></div>
-          <div class="field"><label>${docType === "Purchase Order" ? "Expected Delivery" : "Due Date"}</label><input type="date" id="doc-due" /></div>
+          <div class="field"><label>Date</label><input type="date" id="doc-date" value="${header.date}" /></div>
+          <div class="field"><label>${docType === "Purchase Order" ? "Expected Delivery" : "Due Date"}</label><input type="date" id="doc-due" value="${header.due}" /></div>
           <div class="field"><label>Status</label>
-            <select id="doc-status">${STATUS_OPTIONS_BY_TYPE[docType].map((s) => `<option ${s === STATUS_OPTIONS_BY_TYPE[docType][0] ? "selected" : ""}>${s}</option>`).join("")}</select>
+            <select id="doc-status">${STATUS_OPTIONS_BY_TYPE[docType].filter((st) => st !== "Converted").map((st) => `<option ${st === header.status ? "selected" : ""}>${st}</option>`).join("")}</select>
           </div>
+          <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" id="doc-notes" value="${escapeHtml(header.notes)}" placeholder="Payment terms, bank details, thank-you note… (printed on the document)" /></div>
         </div>
         <table class="jl-table">
           <thead><tr><th style="width:18%">Item</th><th style="width:26%">Description</th><th>Qty</th><th>Rate</th><th>Tax %</th><th>Amount</th><th></th></tr></thead>
@@ -164,6 +198,11 @@ function docTypeView(docType, icon) {
     function bind() {
       document.getElementById("m-close").addEventListener("click", App.closeModal);
       document.getElementById("m-cancel").addEventListener("click", App.closeModal);
+      document.getElementById("doc-party").addEventListener("change", (e) => { header.party = e.target.value; });
+      document.getElementById("doc-date").addEventListener("change", (e) => { header.date = e.target.value; });
+      document.getElementById("doc-due").addEventListener("change", (e) => { header.due = e.target.value; });
+      document.getElementById("doc-status").addEventListener("change", (e) => { header.status = e.target.value; });
+      document.getElementById("doc-notes").addEventListener("input", (e) => { header.notes = e.target.value; });
       const body = document.getElementById("doc-items-body");
       body.querySelectorAll("tr").forEach((row) => {
         const i = Number(row.dataset.i);
@@ -209,13 +248,25 @@ function docTypeView(docType, icon) {
           date: document.getElementById("doc-date").value,
           due_date: document.getElementById("doc-due").value || null,
           status: document.getElementById("doc-status").value,
+          notes: document.getElementById("doc-notes").value.trim() || null,
           items: items.filter((it) => it.description.trim()).map((it) => ({
             description: it.description, quantity: Number(it.quantity) || 0, rate: Number(it.rate) || 0, tax_rate_percent: Number(it.tax_rate_percent) || 0,
             item_id: it.item_id || null,
           })),
         };
         if (payload.items.length === 0) { toast("Add at least one line item", true); return; }
-        await Api.createInvoice(payload);
+        if (!payload.date) { toast("Date is required", true); return; }
+        if (payload.due_date && payload.due_date < payload.date) { toast(`${docType === "Purchase Order" ? "Expected delivery" : "Due date"} can't be before the document date`, true); return; }
+        if (payload.items.some((it) => it.quantity <= 0 || it.rate < 0 || it.tax_rate_percent < 0)) { toast("Quantities must be above zero, and rates/tax can't be negative", true); return; }
+        const saveBtn = document.getElementById("doc-save");
+        saveBtn.disabled = true;
+        try {
+          await Api.createInvoice(payload);
+        } catch (err) {
+          saveBtn.disabled = false;
+          toast(err.message, true);
+          return;
+        }
         toast(`${docType} created`);
         App.closeModal();
         docTypeView(docType, icon).render(container);
@@ -249,9 +300,9 @@ function docTypeView(docType, icon) {
           </div>
         </div>
         <div style="margin-bottom:18px;">
-          <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;">Billed To</div>
+          <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;">${docType === "Purchase Order" ? "Vendor" : docType === "Quote" ? "Prepared For" : "Billed To"}</div>
           <div style="font-weight:600;">${escapeHtml(inv.customer_name || inv.vendor_name || "—")}</div>
-          ${inv.due_date ? `<div class="text-muted" style="font-size:0.82rem;">Due: ${fmtDate(inv.due_date)}</div>` : ""}
+          ${inv.due_date ? `<div class="text-muted" style="font-size:0.82rem;">${docType === "Purchase Order" ? "Expected Delivery" : docType === "Quote" ? "Valid Until" : "Due"}: ${fmtDate(inv.due_date)}</div>` : ""}
         </div>
         <table class="jl-table" style="width:100%;">
           <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Tax %</th><th class="num">Amount</th></tr></thead>

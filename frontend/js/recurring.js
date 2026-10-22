@@ -63,6 +63,13 @@ const RecurringInvoicesView = (() => {
     const existing = recurringId ? templatesCache.find((r) => r.id === recurringId) : null;
     let docType = existing ? existing.doc_type : "Invoice";
     let items = existing ? existing.items.map((it) => ({ ...it })) : [{ description: "", quantity: 1, rate: 0, tax_rate_percent: 0 }];
+    // Kept outside the DOM so re-rendering (type switch, add/remove line) keeps what's typed.
+    const header = {
+      party: existing ? String(existing.customer_id || existing.vendor_id || "") : "",
+      frequency: existing ? existing.frequency : "Monthly",
+      next_run_date: existing ? existing.next_run_date : todayStr(),
+      notes: existing ? existing.notes || "" : "",
+    };
 
     async function renderModal() {
       const [customers, vendors] = await Promise.all([Api.listCustomers(), Api.listVendors()]);
@@ -74,13 +81,13 @@ const RecurringInvoicesView = (() => {
             <select id="rec-doctype"><option ${docType === "Invoice" ? "selected" : ""}>Invoice</option><option ${docType === "Receipt" ? "selected" : ""}>Receipt</option></select>
           </div>
           <div class="field"><label>${usesCustomer ? "Customer" : "Vendor / Payee"}</label>
-            <select id="rec-party"><option value="">—</option>${(usesCustomer ? customers : vendors).map((p) => `<option value="${p.id}" ${existing && (existing.customer_id === p.id || existing.vendor_id === p.id) ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}</select>
+            <select id="rec-party"><option value="">—</option>${(usesCustomer ? customers : vendors).filter((p) => p.is_active || String(p.id) === header.party).map((p) => `<option value="${p.id}" ${String(p.id) === header.party ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}</select>
           </div>
           <div class="field"><label>Frequency</label>
-            <select id="rec-frequency">${RECURRING_FREQUENCIES.map((f) => `<option ${existing && existing.frequency === f ? "selected" : ""}>${f}</option>`).join("")}</select>
+            <select id="rec-frequency">${RECURRING_FREQUENCIES.map((f) => `<option ${header.frequency === f ? "selected" : ""}>${f}</option>`).join("")}</select>
           </div>
-          <div class="field"><label>Next Run Date</label><input type="date" id="rec-next-run" value="${existing ? existing.next_run_date : todayStr()}" /></div>
-          <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" id="rec-notes" value="${existing ? escapeHtml(existing.notes || "") : ""}" /></div>
+          <div class="field"><label>Next Run Date</label><input type="date" id="rec-next-run" value="${header.next_run_date}" /></div>
+          <div class="field" style="grid-column:1/-1;"><label>Notes</label><input type="text" id="rec-notes" value="${escapeHtml(header.notes)}" /></div>
         </div>
         <table class="jl-table">
           <thead><tr><th style="width:40%">Description</th><th>Qty</th><th>Rate</th><th>Tax %</th><th></th></tr></thead>
@@ -107,7 +114,11 @@ const RecurringInvoicesView = (() => {
     function bind() {
       document.getElementById("m-close").addEventListener("click", App.closeModal);
       document.getElementById("m-cancel").addEventListener("click", App.closeModal);
-      document.getElementById("rec-doctype").addEventListener("change", (e) => { docType = e.target.value; renderModal(); });
+      document.getElementById("rec-doctype").addEventListener("change", (e) => { docType = e.target.value; header.party = ""; renderModal(); });
+      document.getElementById("rec-party").addEventListener("change", (e) => { header.party = e.target.value; });
+      document.getElementById("rec-frequency").addEventListener("change", (e) => { header.frequency = e.target.value; });
+      document.getElementById("rec-next-run").addEventListener("change", (e) => { header.next_run_date = e.target.value; });
+      document.getElementById("rec-notes").addEventListener("input", (e) => { header.notes = e.target.value; });
       const body = document.getElementById("rec-items-body");
       body.querySelectorAll("tr").forEach((row) => {
         const i = Number(row.dataset.i);

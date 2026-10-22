@@ -46,8 +46,15 @@ def get_defaults(tax_name: str = "GST", country: str = "", db: Session = Depends
 def complete_setup(payload: schemas.SetupWizardIn, db: Session = Depends(get_db)):
     if setup_logic.is_setup_complete(db):
         raise HTTPException(400, "Setup has already been completed for this company")
-    total_share = sum(o.share_percent for o in payload.owners)
-    if payload.owners and abs(total_share - 100.0) > 0.01:
-        pass  # warn-only, handled client-side; do not hard-block per spec
+    if not payload.profile.name.strip():
+        raise HTTPException(400, "Company name is required")
+    if not 1 <= payload.profile.fy_start_month <= 12:
+        raise HTTPException(400, "Financial year start month must be between 1 and 12")
+    seen_codes = set()
+    for acc in payload.accounts:
+        if acc.code and acc.code in seen_codes:
+            raise HTTPException(400, f"Account code {acc.code} is used more than once")
+        seen_codes.add(acc.code)
+    # Owner share percentages not adding up to 100 is warn-only (client-side), by design.
     company = setup_logic.apply_setup(db, payload)
     return company

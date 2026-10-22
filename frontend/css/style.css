@@ -343,6 +343,8 @@ tfoot td {
 .badge.green { background: var(--accent-soft); color: var(--accent-dark); }
 .badge.red { background: var(--danger-soft); color: var(--danger); }
 .badge.amber { background: var(--warning-soft); color: #9a7420; }
+
+tr.opening-row td { background: var(--bg); color: var(--text-muted); }
 .badge.gray { background: #eef0f4; color: var(--text-muted); }
 
 /* ---------- Buttons / forms ---------- */

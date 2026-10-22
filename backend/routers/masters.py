@@ -26,6 +26,23 @@ def update_company(payload: schemas.CompanyUpdate, db: Session = Depends(get_db)
     if not company:
         raise HTTPException(404, "Company has not been set up yet")
     data = payload.model_dump(exclude_unset=True)
+    if "name" in data and not (data["name"] or "").strip():
+        raise HTTPException(400, "Company name is required")
+    if "fy_start_month" in data and not 1 <= (data["fy_start_month"] or 0) <= 12:
+        raise HTTPException(400, "Financial year start month must be between 1 and 12")
+    new_tax_name = (data.get("tax_name") or "").strip()
+    if "tax_name" in data:
+        if not new_tax_name:
+            raise HTTPException(400, "Tax name is required")
+        data["tax_name"] = new_tax_name
+        if new_tax_name != company.tax_name:
+            # The tax register and invoice generation find the tax accounts by
+            # name ("{tax_name} Payable" / "{tax_name} Input Credit"), so they
+            # have to be renamed along with the tax, or tax reporting goes blank.
+            for suffix in (" Payable", " Input Credit"):
+                acc = db.query(models.Account).filter(models.Account.name == f"{company.tax_name}{suffix}").first()
+                if acc and not db.query(models.Account).filter(models.Account.name == f"{new_tax_name}{suffix}").first():
+                    acc.name = f"{new_tax_name}{suffix}"
     for field, value in data.items():
         setattr(company, field, value)
     db.commit()
@@ -67,6 +84,8 @@ def delete_tax_rate(rate_id: int, db: Session = Depends(get_db)):
     rate = db.query(models.TaxRate).get(rate_id)
     if not rate:
         raise HTTPException(404, "Tax rate not found")
+    if db.query(models.JournalLine).filter(models.JournalLine.tax_rate_id == rate_id).first():
+        raise HTTPException(400, "This tax rate is used on posted journal lines and can't be removed")
     db.delete(rate)
     db.commit()
     return {"ok": True}

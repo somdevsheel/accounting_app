@@ -108,14 +108,19 @@ def update_user(user_id: int, payload: schemas.UserUpdateIn, db: Session = Depen
     user = db.query(models.User).get(user_id)
     if not user:
         raise HTTPException(404, "User not found")
+    if payload.role is not None and payload.role not in ("Admin", "Accountant", "Viewer"):
+        raise HTTPException(400, "Role must be Admin, Accountant, or Viewer")
     if payload.is_active is False and user.id == admin.id:
         raise HTTPException(400, "You can't deactivate your own account")
-    if payload.is_active is False:
+    losing_admin = user.role == "Admin" and (
+        payload.is_active is False or (payload.role is not None and payload.role != "Admin")
+    )
+    if losing_admin:
         remaining_admins = db.query(models.User).filter(
             models.User.role == "Admin", models.User.is_active.is_(True), models.User.id != user.id
         ).count()
-        if user.role == "Admin" and remaining_admins == 0:
-            raise HTTPException(400, "Can't deactivate the last active Admin")
+        if remaining_admins == 0:
+            raise HTTPException(400, "Can't remove the last active Admin — that would lock everyone out of Users & Access")
     if payload.role is not None:
         user.role = payload.role
     if payload.is_active is not None:

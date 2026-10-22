@@ -85,12 +85,21 @@ def trial_balance(db: Session, as_of=None):
     }
 
 
+def opening_balance(db: Session, account: models.Account, start_date=None) -> float:
+    """Balance carried in from before start_date (0 when there's no start date)."""
+    if start_date is None:
+        return 0.0
+    return account_balance(db, account, start_date - datetime.timedelta(days=1))
+
+
 def general_ledger(db: Session, account: models.Account, as_of=None, start_date=None):
     q = _base_query(db, as_of).filter(models.JournalLine.account_id == account.id)
     if start_date is not None:
         q = q.filter(models.JournalEntry.date >= start_date)
     q = q.order_by(models.JournalEntry.date, models.JournalEntry.id)
-    running = 0.0
+    # Running balance starts from what was carried in, not zero — otherwise a
+    # date-filtered ledger/cash book shows a meaningless closing balance.
+    running = opening_balance(db, account, start_date)
     rows = []
     for line in q.all():
         entry = line.journal_entry

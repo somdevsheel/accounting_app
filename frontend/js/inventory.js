@@ -58,7 +58,7 @@ const ItemsView = (() => {
         <div class="field"><label>SKU</label><input type="text" id="i-sku" value="${existing ? escapeHtml(existing.sku) : ""}" placeholder="Auto if blank" /></div>
         <div class="field" style="grid-column:span 2;"><label>Name</label><input type="text" id="i-name" value="${existing ? escapeHtml(existing.name) : ""}" /></div>
         <div class="field"><label>Category</label><input type="text" id="i-category" value="${existing ? escapeHtml(existing.category || "") : ""}" /></div>
-        <div class="field"><label>Unit</label><input type="text" id="i-unit" value="${existing ? existing.unit : "pcs"}" placeholder="pcs, kg, hrs…" /></div>
+        <div class="field"><label>Unit</label><input type="text" id="i-unit" value="${existing ? escapeHtml(existing.unit) : "pcs"}" placeholder="pcs, kg, hrs…" /></div>
         <div class="field"><label>Sale Price</label><input type="number" step="0.01" id="i-sale-price" value="${existing ? existing.sale_price : 0}" /></div>
         <div class="field"><label>Purchase Price</label><input type="number" step="0.01" id="i-purchase-price" value="${existing ? existing.purchase_price : 0}" /></div>
         <div class="field"><label>Reorder Point</label><input type="number" step="0.01" id="i-reorder" value="${existing ? existing.reorder_point : 0}" /></div>
@@ -118,7 +118,7 @@ const ItemsView = (() => {
         <div class="form-grid">
           <div class="field"><label>Type</label><select id="mv-type">${MOVEMENT_TYPES.map((t) => `<option>${t}</option>`).join("")}</select></div>
           <div class="field"><label>Date</label><input type="date" id="mv-date" value="${todayStr()}" /></div>
-          <div class="field"><label>Quantity (+ in / − out)</label><input type="number" step="0.01" id="mv-qty" /></div>
+          <div class="field"><label id="mv-qty-label">Quantity In</label><input type="number" step="0.01" id="mv-qty" /></div>
           <div class="field"><label>Reference</label><input type="text" id="mv-ref" placeholder="Optional" /></div>
         </div>
         <div class="modal-actions" style="border-top:none;"><button class="btn" id="mv-save">Add Movement</button></div>
@@ -127,12 +127,24 @@ const ItemsView = (() => {
     App.openModal(html, { wide: true });
     document.getElementById("m-close").addEventListener("click", App.closeModal);
     document.getElementById("m-cancel").addEventListener("click", App.closeModal);
+    // Opening/Purchase always add stock and Sale always removes it, whatever sign
+    // is typed; only Adjustment takes a signed quantity (+ found / − written off).
+    const typeSel = document.getElementById("mv-type");
+    const qtyLabel = () => {
+      document.getElementById("mv-qty-label").textContent =
+        typeSel.value === "Sale" ? "Quantity Out" : typeSel.value === "Adjustment" ? "Quantity (+ in / − out)" : "Quantity In";
+    };
+    typeSel.addEventListener("change", qtyLabel);
     document.getElementById("mv-save").addEventListener("click", async () => {
-      const qty = Number(document.getElementById("mv-qty").value);
-      if (!qty) { toast("Enter a non-zero quantity", true); return; }
+      const raw = Number(document.getElementById("mv-qty").value);
+      const type = typeSel.value;
+      const date = document.getElementById("mv-date").value;
+      if (!raw) { toast("Enter a non-zero quantity", true); return; }
+      if (!date) { toast("Date is required", true); return; }
+      const qty = type === "Sale" ? -Math.abs(raw) : type === "Adjustment" ? raw : Math.abs(raw);
       await Api.addItemMovement(itemId, {
-        date: document.getElementById("mv-date").value,
-        movement_type: document.getElementById("mv-type").value,
+        date,
+        movement_type: type,
         quantity: qty,
         reference: document.getElementById("mv-ref").value || null,
       });

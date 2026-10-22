@@ -235,5 +235,21 @@ Windows: %APPDATA%\Accrued\company.db — expands to C:\Users\<YourUsername>\App
 Press Win + R, type %APPDATA%\Accrued, press Enter — opens the folder directly in File Explorer.
 Or paste %APPDATA%\Accrued straight into File Explorer's address bar.
 Both are created automatically the first time you run Accrued and complete the Setup Wizard — they won't exist before that.
+Commands used to build the .deb (and .AppImage, built together)
+
+# Step 1 — freeze the backend into a standalone executable (only needed once,
+# or again whenever backend code changes)
+cd backend
+./venv/bin/pip install -r requirements-build.txt
+./venv/bin/python build_backend.py
+
+# Step 2 — package the desktop app (builds BOTH .deb and .AppImage together)
+cd ../electron
+npm run dist
+Output: electron/dist/accrued-accounting_1.0.0_amd64.deb and electron/dist/Accrued-1.0.0.AppImage — both freshly built here, both now include the voucher-numbering fix.
+
+Verified it's actually fixed, not just assumed: extracted the real frozen binary from this exact .deb, ran it standalone against a copy of your real (mismatched-voucher) database, and posted a new Journal entry through it directly — got JV-0006 back cleanly, no 500 error.
+
+To install: sudo apt install ./accrued-accounting_1.0.0_amd64.deb (add sudo apt remove accrued-accounting first if you still have the earlier broken one installed).
 
 ```

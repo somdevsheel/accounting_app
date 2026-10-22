@@ -84,6 +84,21 @@ const AccountsView = (() => {
     App.openModal(html);
     document.getElementById("m-close").addEventListener("click", App.closeModal);
     document.getElementById("m-cancel").addEventListener("click", App.closeModal);
+    if (!existing) {
+      // Sensible defaults as the type changes — still overridable (e.g. a
+      // contra account like Accumulated Depreciation or Owner Drawings).
+      const DEFAULTS = {
+        Asset: ["Current Asset", "Debit"], Liability: ["Current Liability", "Credit"],
+        Capital: ["Capital", "Credit"], Income: ["Income", "Credit"], Expense: ["Expense", "Debit"],
+      };
+      const applyDefaults = () => {
+        const [category, normal] = DEFAULTS[document.getElementById("acc-type").value];
+        document.getElementById("acc-category").value = category;
+        document.getElementById("acc-normal").value = normal;
+      };
+      document.getElementById("acc-type").addEventListener("change", applyDefaults);
+      applyDefaults();
+    }
     if (document.getElementById("acc-delete")) {
       document.getElementById("acc-delete").addEventListener("click", async () => {
         try {
@@ -105,6 +120,7 @@ const AccountsView = (() => {
         normal_balance: document.getElementById("acc-normal").value,
       };
       if (!payload.name) { toast("Account name is required", true); return; }
+      if (payload.code) payload.code = payload.code.trim();
       try {
         if (existing) await Api.updateAccount(existing.id, payload);
         else await Api.createAccount(payload);
@@ -221,6 +237,8 @@ const SettingsView = (() => {
         registration_no: document.getElementById("s-reg").value,
         tax_id: document.getElementById("s-taxid").value,
       };
+      if (!payload.name) { toast("Company name is required", true); return; }
+      if (!payload.currency_symbol.trim() || !payload.currency_code.trim()) { toast("Currency symbol and code are required", true); return; }
       State.company = await Api.updateCompany(payload);
       App.refreshShell();
       toast("Company profile updated");
@@ -317,6 +335,7 @@ const SettingsView = (() => {
         share_percent: Number(document.getElementById("o-share").value) || 0,
       };
       if (!payload.name) { toast("Name is required", true); return; }
+      if (payload.share_percent < 0 || payload.share_percent > 100) { toast("Share % must be between 0 and 100", true); return; }
       if (existing) await Api.updateOwner(existing.id, payload);
       else await Api.createOwner(payload);
       State.owners = await Api.listOwners();
@@ -355,18 +374,24 @@ const SettingsView = (() => {
         </div>
       </div>`;
     document.getElementById("t-name-save").addEventListener("click", async () => {
-      State.company = await Api.updateCompany({ tax_name: document.getElementById("t-name").value.trim() });
+      const taxName = document.getElementById("t-name").value.trim();
+      if (!taxName) { toast("Tax name is required", true); return; }
+      State.company = await Api.updateCompany({ tax_name: taxName });
+      // The backend renames the "{tax} Payable" / "{tax} Input Credit" accounts to match.
+      State.accounts = await Api.listAccounts({ include_inactive: true });
       App.refreshShell();
       toast("Tax name updated");
     });
     document.getElementById("t-add-rate").addEventListener("click", async () => {
-      const rate = Number(document.getElementById("t-new-rate").value);
-      if (isNaN(rate)) { toast("Enter a valid rate", true); return; }
+      const rawRate = document.getElementById("t-new-rate").value;
+      const rate = Number(rawRate);
+      if (rawRate.trim() === "" || isNaN(rate) || rate < 0 || rate > 100) { toast("Enter a rate between 0 and 100", true); return; }
       await Api.createTaxRate({ rate, label: document.getElementById("t-new-label").value || null });
       State.taxRates = await Api.listTaxRates();
       renderTaxTab(body);
     });
     body.querySelectorAll(".rate-del").forEach((btn) => btn.addEventListener("click", async () => {
+      if (!confirm("Remove this tax rate?")) return;
       await Api.deleteTaxRate(Number(btn.dataset.id));
       State.taxRates = await Api.listTaxRates();
       renderTaxTab(body);

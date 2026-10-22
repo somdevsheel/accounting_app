@@ -259,8 +259,15 @@ function fmtDate(d) {
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+// Local-date ISO string (YYYY-MM-DD). Not toISOString(), which converts to UTC
+// first and so lands on the wrong day in any timezone east or west of UTC
+// (e.g. a local midnight in India is still the previous day in UTC).
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return isoDate(new Date());
 }
 
 function escapeHtml(str) {
@@ -302,3 +309,11 @@ function toast(message, isError) {
   holder.appendChild(t);
   setTimeout(() => t.remove(), 4200);
 }
+
+// Many action handlers await an API call without their own try/catch; surface
+// those failures to the user instead of letting them vanish into the console.
+window.addEventListener("unhandledrejection", (e) => {
+  const err = e.reason;
+  if (err && err.status === 401) return; // handled by Api.request (back to login)
+  toast((err && err.message) || "Something went wrong", true);
+});

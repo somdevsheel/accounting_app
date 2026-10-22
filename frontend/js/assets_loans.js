@@ -46,19 +46,38 @@ const AssetsView = (() => {
       </div>`}`;
     document.getElementById("asset-add").addEventListener("click", () => openAssetModal(container));
     body.querySelectorAll(".asset-edit").forEach((btn) => btn.addEventListener("click", () => openAssetModal(container, Number(btn.dataset.id))));
-    body.querySelectorAll(".asset-dispose").forEach((btn) => btn.addEventListener("click", async () => {
-      const d = prompt("Disposal date (YYYY-MM-DD)?", todayStr());
-      if (!d) return;
-      await Api.disposeAsset(Number(btn.dataset.id), d);
-      toast("Asset marked as disposed");
-      render(container);
-    }));
+    body.querySelectorAll(".asset-dispose").forEach((btn) => btn.addEventListener("click", () => openDisposeModal(container, Number(btn.dataset.id))));
     body.querySelectorAll(".asset-delete").forEach((btn) => btn.addEventListener("click", async () => {
       if (!confirm("Delete this fixed asset record?")) return;
       await Api.deleteAsset(Number(btn.dataset.id));
       toast("Asset deleted");
       render(container);
     }));
+  }
+
+  // A modal rather than window.prompt(), which Electron doesn't implement — it
+  // returns nothing there, so the Dispose button silently did nothing.
+  function openDisposeModal(container, assetId) {
+    const asset = assetsCache.find((a) => a.id === assetId);
+    App.openModal(`
+      <div class="modal-header"><h2>Dispose — ${escapeHtml(asset.name)}</h2><button class="modal-close" id="m-close">✕</button></div>
+      <p class="text-muted" style="font-size:0.82rem;margin-top:-6px;">Depreciation stops on the disposal date. The asset stays in the register, marked as disposed.</p>
+      <div class="field" style="max-width:220px;"><label>Disposal Date</label><input type="date" id="ad-date" value="${todayStr()}" min="${asset.purchase_date}" /></div>
+      <div class="modal-actions">
+        <button class="btn secondary" id="m-cancel">Cancel</button>
+        <button class="btn danger" id="ad-save">Mark as Disposed</button>
+      </div>`);
+    document.getElementById("m-close").addEventListener("click", App.closeModal);
+    document.getElementById("m-cancel").addEventListener("click", App.closeModal);
+    document.getElementById("ad-save").addEventListener("click", async () => {
+      const d = document.getElementById("ad-date").value;
+      if (!d) { toast("Pick a disposal date", true); return; }
+      if (d < asset.purchase_date) { toast("Disposal date can't be before the purchase date", true); return; }
+      await Api.disposeAsset(assetId, d);
+      toast("Asset marked as disposed");
+      App.closeModal();
+      render(container);
+    });
   }
 
   function renderSchedule(body) {
@@ -125,6 +144,14 @@ const AssetsView = (() => {
       };
       if (!payload.name || !payload.purchase_date || !payload.cost || !payload.useful_life_years) {
         toast("Name, purchase date, cost and useful life are required", true);
+        return;
+      }
+      if (payload.cost < 0 || payload.useful_life_years < 0 || payload.residual_value < 0) {
+        toast("Cost, useful life and residual value can't be negative", true);
+        return;
+      }
+      if (payload.residual_value > payload.cost) {
+        toast("Residual value can't be more than the cost", true);
         return;
       }
       if (existing) await Api.updateAsset(existing.id, payload);
@@ -235,6 +262,10 @@ const LoansView = (() => {
       };
       if (!payload.lender_name || !payload.principal || !payload.tenure_months || !payload.start_date) {
         toast("Lender, principal, tenure and start date are required", true);
+        return;
+      }
+      if (payload.principal < 0 || payload.interest_rate_annual < 0 || payload.tenure_months < 1 || !Number.isInteger(payload.tenure_months)) {
+        toast("Principal and rate can't be negative, and tenure must be a whole number of months", true);
         return;
       }
       if (existing) await Api.updateLoan(existing.id, payload);

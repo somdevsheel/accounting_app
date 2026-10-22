@@ -9,6 +9,9 @@ import schemas
 from accounting.numbering import next_invoice_no
 from accounting.recurring import FREQUENCIES, advance_date
 from database import get_db
+from routers.invoices import add_invoice_items
+
+MAX_CATCH_UP_RUNS = 60
 
 router = APIRouter(prefix="/api/recurring-invoices", tags=["recurring"])
 
@@ -62,6 +65,10 @@ def update_recurring(recurring_id: int, payload: schemas.RecurringInvoiceIn, db:
     r = db.query(models.RecurringInvoice).get(recurring_id)
     if not r:
         raise HTTPException(404, "Recurring template not found")
+    if payload.frequency not in FREQUENCIES:
+        raise HTTPException(400, f"Frequency must be one of {FREQUENCIES}")
+    if not payload.items:
+        raise HTTPException(400, "Add at least one line item")
     r.doc_type = payload.doc_type
     r.customer_id = payload.customer_id
     r.vendor_id = payload.vendor_id
@@ -98,38 +105,26 @@ def generate_due(db: Session = Depends(get_db)):
     generated = []
     for r in due:
         items = json.loads(r.items_json)
-        invoice_no = next_invoice_no(db, r.doc_type)
-        invoice = models.Invoice(
-            invoice_no=invoice_no,
-            doc_type=r.doc_type,
-            customer_id=r.customer_id,
-            vendor_id=r.vendor_id,
-            date=r.next_run_date,
-            notes=r.notes,
-            status="Unpaid",
-        )
-        db.add(invoice)
-        db.flush()
-        subtotal, tax_amount = 0.0, 0.0
-        for item in items:
-            line_amount = round(item["quantity"] * item["rate"], 2)
-            line_tax = round(line_amount * item["tax_rate_percent"] / 100.0, 2)
-            subtotal += line_amount
-            tax_amount += line_tax
-            db.add(
-                models.InvoiceItem(
-                    invoice_id=invoice.id,
-                    description=item["description"],
-                    quantity=item["quantity"],
-                    rate=item["rate"],
-                    tax_rate_percent=item["tax_rate_percent"],
-                    amount=line_amount,
-                )
+        # Catch up on every run missed while the app was closed, not just one per
+        # launch (capped so a far-past date can't flood the books by accident).
+        runs = 0
+        while r.next_run_date <= today and runs < MAX_CATCH_UP_RUNS:
+            invoice_no = next_invoice_no(db, r.doc_type)
+            invoice = models.Invoice(
+                invoice_no=invoice_no,
+                doc_type=r.doc_type,
+                customer_id=r.customer_id,
+                vendor_id=r.vendor_id,
+                date=r.next_run_date,
+                notes=r.notes,
+                status="Unpaid",
             )
-        invoice.subtotal = round(subtotal, 2)
-        invoice.tax_amount = round(tax_amount, 2)
-        invoice.total = round(subtotal + tax_amount, 2)
-        r.next_run_date = advance_date(r.next_run_date, r.frequency)
-        generated.append(invoice_no)
+            db.add(invoice)
+            db.flush()
+            add_invoice_items(db, invoice, items)
+            db.flush()  # so the next next_invoice_no() sees this number
+            r.next_run_date = advance_date(r.next_run_date, r.frequency)
+            generated.append(invoice_no)
+            runs += 1
     db.commit()
     return {"generated": generated, "count": len(generated)}

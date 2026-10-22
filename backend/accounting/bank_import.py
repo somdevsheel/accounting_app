@@ -26,8 +26,15 @@ def _parse_date(value: str):
 
 
 def _parse_amount(value: str) -> float:
+    value = (value or "").strip()
+    # Accounting-style negatives — "(1,234.50)" — are common in bank exports.
+    negative = value.startswith("(") and value.endswith(")")
     cleaned = re.sub(r"[^\d.\-]", "", value.replace(",", ""))
-    return float(cleaned) if cleaned not in ("", "-", ".") else 0.0
+    try:
+        amount = float(cleaned) if cleaned not in ("", "-", ".") else 0.0
+    except ValueError:
+        return 0.0
+    return -abs(amount) if negative else amount
 
 
 def parse_csv(text: str) -> list[dict]:
@@ -88,6 +95,9 @@ def parse_ofx(text: str) -> list[dict]:
 
 
 def parse_statement(filename: str, text: str) -> list[dict]:
+    # Excel-saved CSVs start with a UTF-8 BOM, which would otherwise glue itself
+    # onto the first header ("\ufeffDate") and hide the date column.
+    text = text.lstrip("\ufeff")
     lower = filename.lower()
     if lower.endswith(".ofx") or lower.endswith(".qfx") or "<STMTTRN>" in text.upper():
         return parse_ofx(text)

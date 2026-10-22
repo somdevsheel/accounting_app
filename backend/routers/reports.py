@@ -48,10 +48,12 @@ def general_ledger(
     if not account:
         raise HTTPException(404, "Account not found")
     rows = ledger.general_ledger(db, account, as_of, start_date)
+    opening = ledger.opening_balance(db, account, start_date)
     return {
         "account": {"id": account.id, "code": account.code, "name": account.name, "normal_balance": account.normal_balance},
+        "opening_balance": opening,
         "lines": rows,
-        "closing_balance": rows[-1]["running_balance"] if rows else 0.0,
+        "closing_balance": rows[-1]["running_balance"] if rows else opening,
     }
 
 
@@ -183,12 +185,14 @@ def expense_register(
 def _cash_or_bank_book(db: Session, account_name: str, start_date=None, end_date=None):
     account = db.query(models.Account).filter(models.Account.name == account_name).first()
     if not account:
-        return {"account": None, "lines": [], "closing_balance": 0.0}
+        return {"account": None, "opening_balance": 0.0, "lines": [], "closing_balance": 0.0}
     rows = ledger.general_ledger(db, account, end_date, start_date)
+    opening = ledger.opening_balance(db, account, start_date)
     return {
         "account": {"id": account.id, "name": account.name},
+        "opening_balance": opening,
         "lines": rows,
-        "closing_balance": rows[-1]["running_balance"] if rows else 0.0,
+        "closing_balance": rows[-1]["running_balance"] if rows else opening,
     }
 
 
@@ -290,6 +294,23 @@ def monthly_trend(months_back: int = 12, db: Session = Depends(get_db)):
     return reports_logic.monthly_trend(db, company.fy_start_month, months_back)
 
 
+def _reconcile(db: Session, account: models.Account, statement_balance: float, statement_date: datetime.date) -> dict:
+    rows = ledger.general_ledger(db, account, as_of=statement_date)
+    book_balance = rows[-1]["running_balance"] if rows else 0.0
+    uncleared = [r for r in rows if not r["is_cleared"]]
+    outstanding_deposits = round(sum(r["debit_amount"] for r in uncleared), 2)
+    outstanding_withdrawals = round(sum(r["credit_amount"] for r in uncleared), 2)
+    adjusted_statement_balance = round(statement_balance + outstanding_deposits - outstanding_withdrawals, 2)
+    return {
+        "rows": rows,
+        "book_balance": book_balance,
+        "outstanding_deposits": outstanding_deposits,
+        "outstanding_withdrawals": outstanding_withdrawals,
+        "adjusted_statement_balance": adjusted_statement_balance,
+        "difference": round(book_balance - adjusted_statement_balance, 2),
+    }
+
+
 @router.get("/bank-reconciliation/{account_id}")
 def bank_reconciliation_preview(
     account_id: int,
@@ -300,13 +321,10 @@ def bank_reconciliation_preview(
     account = db.query(models.Account).get(account_id)
     if not account:
         raise HTTPException(404, "Account not found")
-    rows = ledger.general_ledger(db, account, as_of=statement_date)
-    book_balance = rows[-1]["running_balance"] if rows else 0.0
-    uncleared = [r for r in rows if not r["is_cleared"]]
-    outstanding_deposits = round(sum(r["debit_amount"] for r in uncleared), 2)
-    outstanding_withdrawals = round(sum(r["credit_amount"] for r in uncleared), 2)
-    adjusted_statement_balance = round(statement_balance + outstanding_deposits - outstanding_withdrawals, 2)
-    difference = round(book_balance - adjusted_statement_balance, 2)
+    rec = _reconcile(db, account, statement_balance, statement_date)
+    rows, book_balance = rec["rows"], rec["book_balance"]
+    outstanding_deposits, outstanding_withdrawals = rec["outstanding_deposits"], rec["outstanding_withdrawals"]
+    adjusted_statement_balance, difference = rec["adjusted_statement_balance"], rec["difference"]
     return {
         "account": {"id": account.id, "name": account.name},
         "book_balance": round(book_balance, 2),
@@ -325,9 +343,10 @@ def save_bank_reconciliation(payload: schemas.BankReconciliationIn, db: Session 
     account = db.query(models.Account).get(payload.account_id)
     if not account:
         raise HTTPException(404, "Account not found")
-    rows = ledger.general_ledger(db, account, as_of=payload.statement_date)
-    book_balance = rows[-1]["running_balance"] if rows else 0.0
-    difference = round(book_balance - payload.statement_balance, 2)
+    # Same adjusted difference the preview shows — comparing the raw statement
+    # balance would record uncleared deposits/withdrawals as a discrepancy.
+    result = _reconcile(db, account, payload.statement_balance, payload.statement_date)
+    book_balance, difference = result["book_balance"], result["difference"]
     rec = models.BankReconciliation(
         account_id=payload.account_id,
         statement_date=payload.statement_date,
@@ -399,15 +418,22 @@ def clear_matched(payload: schemas.BankStatementClearIn, db: Session = Depends(g
 
 @router.post("/bank-statement/create-entries")
 def create_entries_from_statement(payload: schemas.BankStatementCreateEntriesIn, db: Session = Depends(get_db)):
+    if not db.query(models.Account).get(payload.account_id):
+        raise HTTPException(404, "Account not found")
     offset_account = db.query(models.Account).get(payload.offset_account_id)
     if not offset_account:
         raise HTTPException(404, "Offset account not found")
+    if payload.offset_account_id == payload.account_id:
+        raise HTTPException(400, "The offset account must be different from the bank account")
     created = []
     for row in payload.rows:
-        amount = round(float(row["amount"]), 2)
+        try:
+            amount = round(float(row["amount"]), 2)
+            row_date = datetime.date.fromisoformat(row["date"]) if isinstance(row["date"], str) else row["date"]
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, f"Invalid statement row: {row}")
         if amount == 0:
             continue
-        row_date = datetime.date.fromisoformat(row["date"]) if isinstance(row["date"], str) else row["date"]
         voucher_no = next_voucher_no(db, "Bank Import")
         entry = models.JournalEntry(
             voucher_no=voucher_no,

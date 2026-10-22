@@ -88,13 +88,12 @@ def is_setup_complete(db: Session) -> bool:
     return bool(company and company.setup_complete)
 
 
-def _next_account_code(db: Session, prefix_start: int = 3100) -> str:
-    existing_codes = [
-        int(a.code) for a in db.query(models.Account).all() if a.code.isdigit()
-    ]
+def _next_account_code(db: Session, prefix_start: int = 3100, reserved=frozenset()) -> str:
+    """reserved: codes already claimed in this session but not yet flushed — the
+    session runs with autoflush off, so a query alone won't see them."""
+    existing_set = {a.code for a in db.query(models.Account).all()} | set(reserved)
     candidate = prefix_start
-    existing_set = set(existing_codes)
-    while candidate in existing_set:
+    while str(candidate) in existing_set:
         candidate += 1
     return str(candidate)
 
@@ -124,8 +123,11 @@ def apply_setup(db: Session, payload: schemas.SetupWizardIn) -> models.Company:
 
     # Chart of accounts
     account_objs = []
+    explicit_codes = {a.code for a in payload.accounts if a.code}
+    used_codes = set()
     for acc_in in payload.accounts:
-        code = acc_in.code or _next_account_code(db)
+        code = acc_in.code or _next_account_code(db, reserved=explicit_codes | used_codes)
+        used_codes.add(code)
         acc = models.Account(
             code=code,
             name=acc_in.name,

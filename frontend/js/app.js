@@ -132,17 +132,25 @@ const App = (() => {
     document.getElementById("modal-root").innerHTML = "";
   }
 
-  function showLoginOnly() {
+  // Full-screen mode for the login screen and setup wizard: no sidebar/topbar.
+  function hideShell() {
     document.getElementById("sidebar").style.display = "none";
     document.querySelector(".topbar").style.display = "none";
-    const contentEl = document.getElementById("view-content");
     document.querySelector(".main").style.padding = "0";
-    contentEl.style.padding = "0";
-    LoginScreen.init(contentEl, () => {
-      document.querySelector(".main").style.padding = "";
-      contentEl.style.padding = "";
-      boot();
-    });
+    document.getElementById("view-content").style.padding = "0";
+  }
+
+  function showShell() {
+    document.getElementById("sidebar").style.display = "";
+    document.querySelector(".topbar").style.display = "";
+    document.querySelector(".main").style.padding = "";
+    document.getElementById("view-content").style.padding = "";
+  }
+
+  function showLoginOnly() {
+    closeModal();
+    hideShell();
+    LoginScreen.init(document.getElementById("view-content"), () => boot());
   }
 
   async function boot() {
@@ -158,16 +166,10 @@ const App = (() => {
     }
     const status = await Api.setupStatus();
     if (!status.setup_complete) {
-      document.getElementById("sidebar").style.display = "none";
-      document.querySelector(".topbar").style.display = "none";
-      const contentEl = document.getElementById("view-content");
-      document.querySelector(".main").style.padding = "0";
-      contentEl.style.padding = "0";
-      await Wizard.init(contentEl, async () => {
+      hideShell();
+      await Wizard.init(document.getElementById("view-content"), async () => {
         await State.loadAll();
-        document.getElementById("sidebar").style.display = "";
-        document.querySelector(".topbar").style.display = "";
-        contentEl.style.padding = "";
+        showShell();
         refreshShell();
         renderSidebar();
         navigate("dashboard");
@@ -175,6 +177,7 @@ const App = (() => {
       return;
     }
     await State.loadAll();
+    showShell();
     refreshShell();
     renderSidebar();
     navigate("dashboard");
@@ -204,4 +207,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
   document.addEventListener("click", () => exportMenu.classList.remove("open"));
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    exportMenu.classList.remove("open");
+    if (document.getElementById("modal-backdrop")) App.closeModal();
+  });
 });

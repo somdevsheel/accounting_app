@@ -67,6 +67,8 @@ def update_item(item_id: int, payload: schemas.ItemIn, db: Session = Depends(get
     item = db.query(models.Item).get(item_id)
     if not item:
         raise HTTPException(404, "Item not found")
+    if payload.sku and db.query(models.Item).filter(models.Item.sku == payload.sku, models.Item.id != item_id).first():
+        raise HTTPException(400, f"SKU '{payload.sku}' is already in use")
     for field, value in payload.model_dump(exclude={"sku"}).items():
         setattr(item, field, value)
     if payload.sku:

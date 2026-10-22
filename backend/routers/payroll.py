@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -134,6 +136,8 @@ def get_payroll_run(run_id: int, db: Session = Depends(get_db)):
 
 @router.post("/payroll-runs", response_model=schemas.PayrollRunOut)
 def create_payroll_run(payload: schemas.PayrollRunIn, db: Session = Depends(get_db)):
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", payload.month or ""):
+        raise HTTPException(400, "Month must be in YYYY-MM format")
     if db.query(models.PayrollRun).filter(models.PayrollRun.month == payload.month).first():
         raise HTTPException(400, f"A payroll run for {payload.month} already exists")
     employees = db.query(models.Employee).filter(models.Employee.is_active.is_(True)).all()
@@ -179,7 +183,13 @@ def post_payroll_run(run_id: int, db: Session = Depends(get_db)):
     if not (salaries_account and bank_account and withholding_account):
         raise HTTPException(400, "Salaries & Wages, Bank, and TDS/Withholding Payable accounts are required in the Chart of Accounts")
 
+    negative = [p.employee.name if p.employee else str(p.employee_id) for p in run.payslips if p.net_pay < 0]
+    if negative:
+        raise HTTPException(400, f"Deductions exceed gross pay for: {', '.join(negative)} — fix the deduction types and re-run payroll")
+
     total_expense = sum(p.gross_pay + p.employer_contributions_total for p in run.payslips)
+    if total_expense <= 0:
+        raise HTTPException(400, "This payroll run has nothing to post (total salary cost is zero)")
     total_net = sum(p.net_pay for p in run.payslips)
     total_withheld = sum(p.employee_deductions_total + p.employer_contributions_total for p in run.payslips)
 

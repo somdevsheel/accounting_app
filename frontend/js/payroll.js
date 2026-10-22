@@ -142,6 +142,7 @@ const PayrollView = (() => {
       try {
         const run = await Api.createPayrollRun({ month, run_date: todayStr() });
         toast("Payroll run created");
+        await render(container); // so the new run is in the list behind the modal
         viewRun(container, run.id);
       } catch (err) {
         toast(err.message, true);

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
-from accounting.numbering import next_invoice_no
+from accounting.numbering import INVOICE_PREFIX, next_invoice_no
 from database import get_db
 
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
@@ -59,17 +59,14 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
     return _serialize(invoice)
 
 
-@router.post("")
-def create_invoice(payload: schemas.InvoiceIn, db: Session = Depends(get_db)):
-    invoice_no = next_invoice_no(db, payload.doc_type)
-    items_data = payload.model_dump(exclude={"items"})
-    invoice = models.Invoice(**items_data, invoice_no=invoice_no)
-    db.add(invoice)
-    db.flush()
-
+def add_invoice_items(db: Session, invoice: models.Invoice, items) -> None:
+    """Add line items to a flushed invoice and set its totals. items: InvoiceItemIn
+    objects or equivalent dicts. Shared by manual creation, quote conversion and
+    recurring generation so all three treat stock the same way."""
     subtotal = 0.0
     tax_amount = 0.0
-    for item_in in payload.items:
+    for raw in items:
+        item_in = raw if isinstance(raw, schemas.InvoiceItemIn) else schemas.InvoiceItemIn(**raw)
         line_amount = round(item_in.quantity * item_in.rate, 2)
         line_tax = round(line_amount * item_in.tax_rate_percent / 100.0, 2)
         subtotal += line_amount
@@ -86,22 +83,34 @@ def create_invoice(payload: schemas.InvoiceIn, db: Session = Depends(get_db)):
             )
         )
         # Selling a stock-tracked item on an Invoice deducts it from stock automatically.
-        if item_in.item_id and payload.doc_type == "Invoice":
+        if item_in.item_id and invoice.doc_type == "Invoice":
             stock_item = db.query(models.Item).get(item_in.item_id)
             if stock_item and stock_item.is_stock_tracked:
                 db.add(
                     models.StockMovement(
                         item_id=item_in.item_id,
-                        date=payload.date,
+                        date=invoice.date,
                         movement_type="Sale",
                         quantity=-abs(item_in.quantity),
                         unit_cost=stock_item.purchase_price,
-                        reference=invoice_no,
+                        reference=invoice.invoice_no,
                     )
                 )
     invoice.subtotal = round(subtotal, 2)
     invoice.tax_amount = round(tax_amount, 2)
     invoice.total = round(subtotal + tax_amount, 2)
+
+
+@router.post("")
+def create_invoice(payload: schemas.InvoiceIn, db: Session = Depends(get_db)):
+    if payload.doc_type not in INVOICE_PREFIX:
+        raise HTTPException(400, f"Document type must be one of {list(INVOICE_PREFIX)}")
+    invoice_no = next_invoice_no(db, payload.doc_type)
+    items_data = payload.model_dump(exclude={"items"})
+    invoice = models.Invoice(**items_data, invoice_no=invoice_no)
+    db.add(invoice)
+    db.flush()
+    add_invoice_items(db, invoice, payload.items)
     db.commit()
     db.refresh(invoice)
     return _serialize(invoice)
@@ -177,23 +186,14 @@ def convert_quote_to_invoice(quote_id: int, db: Session = Depends(get_db)):
         date=quote.date,
         notes=quote.notes,
         status="Unpaid",
-        subtotal=quote.subtotal,
-        tax_amount=quote.tax_amount,
-        total=quote.total,
     )
     db.add(invoice)
     db.flush()
-    for item in quote.items:
-        db.add(
-            models.InvoiceItem(
-                invoice_id=invoice.id,
-                description=item.description,
-                quantity=item.quantity,
-                rate=item.rate,
-                tax_rate_percent=item.tax_rate_percent,
-                amount=item.amount,
-            )
-        )
+    add_invoice_items(db, invoice, [
+        {"description": i.description, "quantity": i.quantity, "rate": i.rate,
+         "tax_rate_percent": i.tax_rate_percent, "item_id": i.item_id}
+        for i in quote.items
+    ])
     quote.status = "Converted"
     quote.converted_invoice_id = invoice.id
     db.commit()
@@ -216,6 +216,15 @@ def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
     invoice = db.query(models.Invoice).get(invoice_id)
     if not invoice:
         raise HTTPException(404, "Invoice not found")
+    # Put back the stock this invoice deducted when it was created.
+    db.query(models.StockMovement).filter(
+        models.StockMovement.reference == invoice.invoice_no,
+        models.StockMovement.movement_type == "Sale",
+    ).delete(synchronize_session=False)
+    # A quote converted into this invoice becomes convertible again.
+    for quote in db.query(models.Invoice).filter(models.Invoice.converted_invoice_id == invoice.id).all():
+        quote.converted_invoice_id = None
+        quote.status = "Accepted"
     db.delete(invoice)
     db.commit()
     return {"ok": True}

@@ -5,7 +5,7 @@ function addMonths(date, n) {
 }
 
 function toIso(d) {
-  return d.toISOString().slice(0, 10);
+  return isoDate(d);
 }
 
 function fyStartForDate(date, fyStartMonth) {

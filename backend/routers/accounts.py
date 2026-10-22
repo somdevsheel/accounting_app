@@ -54,6 +54,11 @@ def update_account(account_id: int, payload: schemas.AccountUpdate, db: Session 
     if not acc:
         raise HTTPException(404, "Account not found")
     data = payload.model_dump(exclude_unset=True)
+    if "code" in data:
+        if not data["code"]:
+            data.pop("code")  # blank means "keep the current code", not "clear it"
+        elif db.query(models.Account).filter(models.Account.code == data["code"], models.Account.id != account_id).first():
+            raise HTTPException(400, f"Account code {data['code']} already exists")
     for field, value in data.items():
         setattr(acc, field, value)
     db.commit()
@@ -94,6 +99,14 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
             400,
             "This account has journal lines posted against it and cannot be deleted. Deactivate it instead.",
         )
+    linked = (
+        db.query(models.Owner).filter(models.Owner.capital_account_id == account_id).first()
+        or db.query(models.FixedAsset).filter(models.FixedAsset.account_id == account_id).first()
+        or db.query(models.Loan).filter(models.Loan.account_id == account_id).first()
+        or db.query(models.BankReconciliation).filter(models.BankReconciliation.account_id == account_id).first()
+    )
+    if linked:
+        raise HTTPException(400, "This account is linked to an owner, fixed asset, loan or reconciliation and cannot be deleted. Deactivate it instead.")
     db.delete(acc)
     db.commit()
     return {"ok": True}

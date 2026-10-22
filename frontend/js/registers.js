@@ -58,7 +58,7 @@ function renderRegister(results, data, kind, icon, emptyTitle, emptyMsg) {
               <td>${fmtDate(r.date)}</td><td>${r.voucher_no}</td><td>${escapeHtml(r.party_name || "—")}</td>
               <td>${escapeHtml(r.narration || "")}</td>
               <td class="num">${fmtMoney(r.net)}</td><td class="num">${fmtMoney(r.tax)}</td><td class="num">${fmtMoney(r.total)}</td>
-              <td>${r.payment_status === "Paid" ? '<span class="badge green">Paid</span>' : '<span class="badge gray">Unpaid</span>'}</td>
+              <td>${r.payment_status === "Paid" ? '<span class="badge green">Paid</span>' : r.payment_status === "Partial" ? '<span class="badge amber">Partial</span>' : '<span class="badge gray">Unpaid</span>'}</td>
             </tr>`).join("")}
         </tbody>
         <tfoot><tr><td colspan="4">Total</td><td class="num">${fmtMoney(data.total_net)}</td><td class="num">${fmtMoney(data.total_tax)}</td><td class="num">${fmtMoney(data.total_gross)}</td><td></td></tr></tfoot>
@@ -101,7 +101,7 @@ function bookView(fetchFn, label, icon) {
       const params = { start_date: document.getElementById("rg-start").value || undefined, end_date: document.getElementById("rg-end").value || undefined };
       const data = await fetchFn(params);
       const results = document.getElementById("rg-results");
-      if (!data.account || data.lines.length === 0) {
+      if (!data.account || (data.lines.length === 0 && !data.opening_balance)) {
         results.innerHTML = emptyState(icon, `No ${label} activity yet`, `Every transaction touching ${label} will appear here with a running balance.`);
         return;
       }
@@ -110,6 +110,7 @@ function bookView(fetchFn, label, icon) {
           <table>
             <thead><tr><th>Date</th><th>Voucher No.</th><th>Particulars</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Running Balance</th></tr></thead>
             <tbody>
+              ${params.start_date ? openingBalanceRow(data.opening_balance, 6) : ""}
               ${data.lines.map((l) => `<tr><td>${fmtDate(l.date)}</td><td>${l.voucher_no}</td><td>${escapeHtml(l.particulars)}</td><td class="num">${l.debit_amount ? fmtMoney(l.debit_amount) : ""}</td><td class="num">${l.credit_amount ? fmtMoney(l.credit_amount) : ""}</td><td class="num">${fmtMoney(l.running_balance)}</td></tr>`).join("")}
             </tbody>
             <tfoot><tr><td colspan="5">Closing Balance</td><td class="num">${fmtMoney(data.closing_balance)}</td></tr></tfoot>
@@ -253,8 +254,9 @@ const BankReconciliationView = (() => {
       const accountId = Number(document.getElementById("br-account").value);
       const statementBalance = Number(document.getElementById("br-balance").value) || 0;
       const statementDate = document.getElementById("br-date").value;
-      await Api.saveBankReconciliation({ account_id: accountId, statement_date: statementDate, statement_balance: statementBalance });
-      toast("Reconciliation saved");
+      if (!accountId || !statementDate) { toast("Pick an account and statement date", true); return; }
+      const saved = await Api.saveBankReconciliation({ account_id: accountId, statement_date: statementDate, statement_balance: statementBalance });
+      toast(Math.abs(saved.difference) < 0.01 ? "Reconciliation saved — fully reconciled" : `Reconciliation saved with a difference of ${fmtMoney(saved.difference)}`);
     });
     if (cashBankAccounts.length > 0) load();
     else document.getElementById("br-results").innerHTML = emptyState("🏦", "No Cash or Bank account", "Add a Cash or Bank account in Chart of Accounts first.");
